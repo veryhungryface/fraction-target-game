@@ -1,9 +1,7 @@
 'use client';
 
 import {
-  Crown,
   Crosshair,
-  Flag,
   Gauge,
   Play,
   QrCode,
@@ -193,9 +191,13 @@ function TeacherBoard({
   const answer = fractionValue(round.question);
   const submittedCount = visibleSubmissions.length;
   const playerCount = room.players.length;
+  const showRanking = room.showRanking ?? true;
   const ranked = [...(round.status === 'revealed' ? fullSubmissions : visibleSubmissions)]
-    .sort((left, right) => left.errorPct - right.errorPct || right.score - left.score)
-    .slice(0, 5);
+    .sort(
+      (left, right) =>
+        getAnswerDifference(left, round.question) - getAnswerDifference(right, round.question) ||
+        left.submittedAt - right.submittedAt
+    );
 
   return (
     <section className={styles.teacherWrap}>
@@ -221,18 +223,23 @@ function TeacherBoard({
 
         {round.status === 'lobby' ? (
           <div className={styles.lobbyLayout}>
-            <section className={styles.lobbyHero}>
-              <div className={styles.roundBadge}>
-                {round.question.boss ? <Crown size={18} /> : <Flag size={18} />}
-                {round.question.levelTitle} · {round.question.levelIndex}번
+            <section className={styles.lobbyTopBar}>
+              <div className={styles.lobbyQrBlock}>
+                <div className={styles.qrHeader}>
+                  <QrCode size={24} />
+                  <span>방 코드 {room.code}</span>
+                </div>
+                {studentUrl ? (
+                  <img
+                    alt="학생 접속 QR"
+                    className={styles.qrImage}
+                    src={`/api/fraction-target/qr?text=${encodeURIComponent(studentUrl)}`}
+                  />
+                ) : (
+                  <div className={styles.qrFallback} />
+                )}
               </div>
-              <h2>
-                <QuestionExpression label={round.question.label} />
-                <span>는 어디일까?</span>
-              </h2>
-              <p>
-                {formatRange(round.question)} 수직선에서 계산 결과의 소수 위치를 찾아요.
-              </p>
+
               <div className={styles.lobbyActions}>
                 <button className={styles.primaryButton} onClick={() => postAction('startRound')} type="button">
                   <Play size={24} /> 게임 시작
@@ -244,26 +251,19 @@ function TeacherBoard({
                   <RotateCcw size={22} />
                 </button>
               </div>
+            </section>
+
+            <section className={styles.problemBankPanel}>
+              <div className={styles.problemBankHeader}>
+                <div>
+                  <span>문제 선택</span>
+                  <strong>레벨과 번호를 골라 바로 시작해요.</strong>
+                </div>
+                <b>{questionBank.length}문제</b>
+              </div>
               <QuestionPicker currentIndex={round.index} postAction={postAction} />
             </section>
 
-            <aside className={styles.qrPanel}>
-              <div className={styles.qrHeader}>
-                <QrCode size={24} />
-                <span>방 코드 {room.code}</span>
-              </div>
-              {studentUrl ? (
-                <img
-                  alt="학생 접속 QR"
-                  className={styles.qrImage}
-                  src={`/api/fraction-target/qr?text=${encodeURIComponent(studentUrl)}`}
-                />
-              ) : (
-                <div className={styles.qrFallback} />
-              )}
-              <p>{studentUrl || 'http://localhost:3012/fraction-target'}</p>
-              <TeamRoster players={room.players} />
-            </aside>
           </div>
         ) : (
           <div className={styles.roundLayout}>
@@ -272,10 +272,7 @@ function TeacherBoard({
                 <p>
                   {round.question.levelTitle} · {round.question.objective}
                 </p>
-                <h2>
-                  <QuestionExpression label={round.question.label} />
-                  <span>는 어디일까?</span>
-                </h2>
+                <h2>답변 분포</h2>
               </div>
               <div className={styles.answerBadge} data-visible={round.status === 'revealed'}>
                 <Crosshair size={22} />
@@ -289,19 +286,35 @@ function TeacherBoard({
               <div className={styles.resultCard}>
                 <div className={styles.resultTitle}>
                   <Trophy size={22} />
-                  <span>TOP 5</span>
+                  <span>순위</span>
+                  <button
+                    aria-pressed={showRanking}
+                    className={styles.rankToggle}
+                    onClick={() => postAction('setRankingVisible', { value: !showRanking })}
+                    type="button"
+                  >
+                    {showRanking ? '순위 공개' : '순위 비공개'}
+                  </button>
                 </div>
-                {round.status === 'revealed' ? (
+                {round.status === 'revealed' && showRanking ? (
                   <ol className={styles.rankList}>
-                    {ranked.map((submission) => (
+                    {ranked.map((submission, index) => (
                       <li key={submission.playerId}>
-                        <span style={{ '--team': getTeam(submission.team).color } as CSSProperties} />
+                        <span style={{ '--team': getTeam(submission.team).color } as CSSProperties}>{index + 1}</span>
                         <strong>{submission.playerName}</strong>
-                        <em>오차 {submission.errorPct}%</em>
+                        <em>
+                          차이 {formatDecimal(getAnswerDifference(submission, round.question))} · 제출{' '}
+                          {formatElapsedTime(submission.submittedAt, round.startedAt)}
+                        </em>
                         <b>{submission.score}점</b>
                       </li>
                     ))}
                   </ol>
+                ) : round.status === 'revealed' ? (
+                  <div className={styles.hiddenRank}>
+                    <Radio size={30} />
+                    <span>순위 비공개</span>
+                  </div>
                 ) : (
                   <div className={styles.hiddenRank}>
                     <Radio size={30} />
@@ -610,29 +623,14 @@ function QuestionPicker({
                 title={`${question.label} = ${formatResultFraction(question)} = ${formatDecimal(fractionValue(question))}`}
                 type="button"
               >
-                {question.boss ? <Crown size={15} /> : null}
-                {question.levelIndex}
+                <span>{question.boss ? 'B' : question.levelIndex}</span>
+                <strong>{question.label}</strong>
+                <em>{formatRange(question)}</em>
               </button>
             ))}
           </div>
         </section>
       ))}
-    </div>
-  );
-}
-
-function TeamRoster({ players }: { players: RoomState['players'] }) {
-  return (
-    <div className={styles.teamRoster}>
-      {teams.map((team) => {
-        const count = players.filter((player) => player.team === team.id).length;
-        return (
-          <div key={team.id} style={{ '--team': team.color, '--team-soft': team.softColor } as CSSProperties}>
-            <span>{team.name}</span>
-            <strong>{count}</strong>
-          </div>
-        );
-      })}
     </div>
   );
 }
@@ -939,6 +937,15 @@ function formatTick(value: number): string {
   if (value === 0.5) return '1/2';
   if (value === 0.75) return '3/4';
   return formatDecimal(value);
+}
+
+function getAnswerDifference(submission: Submission, question: FractionQuestion): number {
+  return Math.abs(fractionValue(question) - submission.value);
+}
+
+function formatElapsedTime(submittedAt: number, startedAt: number | undefined): string {
+  if (!startedAt) return '-';
+  return `${Math.max(0, (submittedAt - startedAt) / 1000).toFixed(1)}초`;
 }
 
 function isTerminatingDecimal(numerator: number, denominator: number): boolean {

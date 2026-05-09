@@ -61,6 +61,7 @@ export type RoomState = {
   updatedAt: number;
   teacherId?: string;
   teacherLastSeenAt?: number;
+  showRanking: boolean;
   questionBank: FractionQuestion[];
   players: Player[];
   round: RoundState;
@@ -208,6 +209,7 @@ export function createInitialRoom(code = '4827'): RoomState {
     title: '분수를 알라!',
     createdAt: Date.now(),
     updatedAt: Date.now(),
+    showRanking: true,
     questionBank,
     players: [],
     round: {

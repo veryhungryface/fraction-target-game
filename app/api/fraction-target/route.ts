@@ -31,7 +31,7 @@ type RequestBody = {
   playerId?: string;
   name?: string;
   team?: TeamId;
-  value?: number;
+  value?: number | boolean;
 };
 
 export async function GET(request: NextRequest) {
@@ -145,8 +145,14 @@ export async function POST(request: NextRequest) {
       const resetRoom = createInitialRoom(room.code);
       resetRoom.teacherId = room.teacherId;
       resetRoom.teacherLastSeenAt = now;
+      resetRoom.showRanking = room.showRanking ?? true;
       rooms.set(room.code, resetRoom);
       return NextResponse.json({ room: rooms.get(room.code), now });
+    }
+
+    case 'setRankingVisible': {
+      room.showRanking = body.value !== false;
+      break;
     }
 
     case 'setQuestion': {

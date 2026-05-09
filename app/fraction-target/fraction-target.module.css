@@ -187,37 +187,78 @@
 .lobbyLayout {
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.55fr);
-  gap: clamp(18px, 2vw, 30px);
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: clamp(14px, 1.5vw, 22px);
 }
 
-.lobbyHero {
+.lobbyTopBar,
+.problemBankPanel {
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  padding: clamp(24px, 3.5vw, 58px);
   border-radius: 28px;
-  background:
-    linear-gradient(125deg, rgba(255, 250, 242, 0.88), rgba(255, 250, 242, 0.42)),
-    url("/fraction-target/target-burst.svg") right -10% center / min(36vw, 520px) no-repeat;
+  background: rgba(255, 250, 242, 0.82);
   box-shadow: inset 0 0 0 1px rgba(19, 32, 31, 0.08);
 }
 
-.roundBadge {
-  width: fit-content;
-  display: inline-flex;
+.lobbyTopBar {
+  grid-column: 1 / -1;
+  display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
+  justify-content: space-between;
+  gap: clamp(16px, 1.5vw, 26px);
+  padding: clamp(14px, 1.25vw, 22px);
+}
+
+.lobbyQrBlock {
+  display: flex;
+  align-items: center;
+  gap: clamp(14px, 1.3vw, 22px);
+}
+
+.lobbyQrBlock .qrImage,
+.lobbyQrBlock .qrFallback {
+  width: clamp(92px, 7.5vw, 128px);
+  border-radius: 18px;
+}
+
+.problemBankPanel {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: clamp(16px, 1.45vw, 24px);
+}
+
+.problemBankHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.problemBankHeader span {
+  color: var(--coral);
+  font-size: clamp(13px, 1vw, 16px);
+  font-weight: 950;
+}
+
+.problemBankHeader strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--ink);
+  font-size: clamp(22px, 2vw, 34px);
+  font-weight: 950;
+  line-height: 1.1;
+}
+
+.problemBankHeader b {
+  flex: 0 0 auto;
+  padding: 8px 13px;
   border-radius: 999px;
   background: var(--ink);
   color: var(--paper);
-  font-size: clamp(13px, 1vw, 16px);
-  font-weight: 900;
+  font-size: clamp(14px, 1vw, 17px);
 }
 
-.lobbyHero h2,
 .questionBanner h2,
 .mobileQuestion h2 {
   margin: 18px 0 0;
@@ -232,20 +273,11 @@
   letter-spacing: 0;
 }
 
-.lobbyHero p {
-  margin-top: 18px;
-  max-width: 650px;
-  color: #40514e;
-  font-size: clamp(17px, 1.45vw, 24px);
-  font-weight: 800;
-  line-height: 1.45;
-}
-
 .lobbyActions {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-top: clamp(24px, 2.5vw, 42px);
+  margin-left: auto;
 }
 
 .primaryButton,
@@ -297,12 +329,13 @@
 }
 
 .questionPicker {
-  max-height: clamp(190px, 24vh, 300px);
+  min-height: 0;
+  flex: 1;
   overflow: auto;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px 12px;
-  margin-top: clamp(24px, 3vw, 52px);
+  margin-top: clamp(12px, 1.2vw, 18px);
   padding-right: 4px;
 }
 
@@ -325,44 +358,54 @@
 }
 
 .questionLevel div {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
 }
 
 .questionPicker button {
-  min-width: clamp(34px, 2.5vw, 44px);
-  min-height: clamp(34px, 2.5vw, 44px);
-  display: inline-flex;
+  min-width: 0;
+  min-height: clamp(40px, 3vw, 52px);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: center;
-  gap: 5px;
+  gap: 7px;
+  padding: 6px 8px;
   border: 1px solid rgba(19, 32, 31, 0.12);
   border-radius: 12px;
   background: rgba(255, 250, 242, 0.82);
   color: var(--ink);
-  font-size: clamp(14px, 1vw, 18px);
+  text-align: left;
+  font-size: clamp(12px, 0.84vw, 15px);
   font-weight: 950;
+}
+
+.questionPicker button > span {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(19, 32, 31, 0.1);
+  font-size: 12px;
+}
+
+.questionPicker button strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.questionPicker button em {
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
 }
 
 .questionPicker .currentQuestion {
   background: var(--yellow);
   border-color: rgba(19, 32, 31, 0.18);
   box-shadow: 0 12px 26px rgba(245, 184, 46, 0.28);
-}
-
-.qrPanel {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 16px;
-  padding: clamp(18px, 1.7vw, 28px);
-  border-radius: 28px;
-  background: rgba(255, 250, 242, 0.88);
-  box-shadow:
-    inset 0 0 0 1px rgba(19, 32, 31, 0.09),
-    0 18px 45px rgba(19, 32, 31, 0.09);
 }
 
 .qrHeader {
@@ -392,45 +435,6 @@
     linear-gradient(90deg, var(--ink) 14px, transparent 14px) 0 0 / 32px 32px,
     linear-gradient(var(--ink) 14px, transparent 14px) 0 0 / 32px 32px,
     white;
-}
-
-.qrPanel p {
-  margin: 0;
-  overflow-wrap: anywhere;
-  color: #40514e;
-  font-size: clamp(12px, 0.9vw, 15px);
-  font-weight: 800;
-  line-height: 1.3;
-}
-
-.teamRoster {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.teamRoster div {
-  min-height: clamp(56px, 4.6vw, 72px);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 0 14px;
-  border-radius: 18px;
-  background: var(--team-soft);
-  box-shadow: inset 0 0 0 1px rgba(19, 32, 31, 0.08);
-}
-
-.teamRoster span {
-  color: var(--team);
-  font-size: clamp(14px, 1.12vw, 18px);
-  font-weight: 950;
-}
-
-.teamRoster strong {
-  color: var(--ink);
-  font-size: clamp(22px, 2vw, 34px);
-  font-weight: 950;
 }
 
 .roundLayout {
@@ -642,7 +646,27 @@
   font-weight: 950;
 }
 
+.rankToggle {
+  margin-left: auto;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(19, 32, 31, 0.12);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 950;
+  cursor: pointer;
+}
+
+.rankToggle[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--paper);
+}
+
 .rankList {
+  max-height: clamp(170px, 21vw, 310px);
+  overflow: auto;
   display: grid;
   gap: 8px;
   margin: 0;
@@ -653,7 +677,7 @@
 .rankList li {
   min-height: clamp(40px, 3vw, 52px);
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
   grid-template-areas:
     "dot name score"
     "dot error score";
@@ -666,10 +690,15 @@
 
 .rankList li > span {
   grid-area: dot;
-  width: 13px;
-  height: 32px;
-  border-radius: 999px;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
   background: var(--team);
+  color: white;
+  font-size: 14px;
+  font-weight: 950;
 }
 
 .rankList strong {
@@ -1413,6 +1442,10 @@
     aspect-ratio: 16 / 9;
   }
 
+  .questionPicker {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
 }
 
 @media (max-width: 720px) {
@@ -1426,12 +1459,25 @@
     border-radius: 24px;
   }
 
-  .lobbyHero {
-    padding: 22px;
+  .lobbyLayout {
+    grid-template-columns: 1fr;
   }
 
-  .qrPanel {
+  .lobbyTopBar {
+    flex-wrap: wrap;
+  }
+
+  .lobbyActions {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .problemBankPanel {
     padding: 16px;
+  }
+
+  .questionPicker {
+    grid-template-columns: 1fr;
   }
 
   .roundLayout {
