@@ -32,6 +32,7 @@ type RequestBody = {
   name?: string;
   team?: TeamId;
   value?: number | boolean;
+  allowReassign?: boolean;
 };
 
 export async function GET(request: NextRequest) {
@@ -45,7 +46,7 @@ export async function POST(request: NextRequest) {
   const now = Date.now();
 
   if (body.action === 'claimRoom') {
-    const room = claimRoom(body.roomCode, normalizeTeacherId(body.teacherId, now), now);
+    const room = claimRoom(body.roomCode, normalizeTeacherId(body.teacherId, now), body.allowReassign !== false, now);
     return NextResponse.json({ room, now });
   }
 
@@ -86,6 +87,10 @@ export async function POST(request: NextRequest) {
     }
 
     case 'startRound': {
+      if (room.round.status !== 'lobby') {
+        break;
+      }
+
       const startedAt = now;
       room.round = {
         ...room.round,
@@ -131,12 +136,20 @@ export async function POST(request: NextRequest) {
     }
 
     case 'reveal': {
+      if (room.round.status !== 'active') {
+        break;
+      }
+
       room.round.status = 'revealed';
       room.round.revealedAt = now;
       break;
     }
 
     case 'nextRound': {
+      if (room.round.status !== 'revealed') {
+        break;
+      }
+
       room.round = createNextRound(room.round.index);
       break;
     }
@@ -156,6 +169,10 @@ export async function POST(request: NextRequest) {
     }
 
     case 'setQuestion': {
+      if (room.round.status !== 'lobby') {
+        break;
+      }
+
       const index = Number(body.value);
       const question = questionBank[index];
       if (question) {
@@ -189,14 +206,23 @@ function getRoom(code = defaultRoomCode): RoomState {
   return room;
 }
 
-function claimRoom(preferredCode = defaultRoomCode, teacherId: string, now: number): RoomState {
+function claimRoom(preferredCode = defaultRoomCode, teacherId: string, allowReassign: boolean, now: number): RoomState {
   const preferredRoom = getRoom(preferredCode);
-  const room = isRoomClaimedByOther(preferredRoom, teacherId, now) ? getRoom(createAvailableRoomCode(now)) : preferredRoom;
 
-  room.teacherId = teacherId;
-  room.teacherLastSeenAt = now;
-  room.updatedAt = now;
-  return room;
+  if (isRoomClaimedByOther(preferredRoom, teacherId, now)) {
+    if (!allowReassign) return preferredRoom;
+
+    const nextRoom = getRoom(createAvailableRoomCode(now));
+    nextRoom.teacherId = teacherId;
+    nextRoom.teacherLastSeenAt = now;
+    nextRoom.updatedAt = now;
+    return nextRoom;
+  }
+
+  preferredRoom.teacherId = teacherId;
+  preferredRoom.teacherLastSeenAt = now;
+  preferredRoom.updatedAt = now;
+  return preferredRoom;
 }
 
 function createAvailableRoomCode(now: number): string {

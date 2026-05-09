@@ -15,7 +15,7 @@ import {
   Trophy,
   UsersRound
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
   fractionValue,
   getTeam,
@@ -34,6 +34,10 @@ type ApiResponse = {
   room: RoomState;
   now: number;
 };
+type ApplyRoomOptions = {
+  allowRoomChange?: boolean;
+  preserveMissingPlayers?: boolean;
+};
 
 const defaultRoomCode = '4827';
 const teacherStorageKey = 'fraction-target-teacher-id';
@@ -45,35 +49,70 @@ export default function FractionTargetPage() {
   const [room, setRoom] = useState<RoomState | null>(null);
   const [serverNow, setServerNow] = useState(Date.now());
   const [origin, setOrigin] = useState('');
+  const [isMutating, setIsMutating] = useState(false);
+  const mutationSeqRef = useRef(0);
+  const pendingMutationsRef = useRef(0);
+  const completedTeacherClaimRef = useRef(false);
+
+  const applyRoomPayload = useCallback((payload: ApiResponse, options: ApplyRoomOptions = {}) => {
+    setRoom((current) => {
+      if (!current) return payload.room;
+      if (payload.room.code !== current.code) {
+        return options.allowRoomChange === false ? current : payload.room;
+      }
+      if (payload.room.updatedAt < current.updatedAt) return current;
+
+      return mergeRoomSnapshot(current, payload.room, options);
+    });
+    setServerNow(payload.now);
+  }, []);
 
   const loadRoom = useCallback(async () => {
+    if (pendingMutationsRef.current > 0) return;
+    const mutationSeq = mutationSeqRef.current;
     const response = await fetch(`/api/fraction-target?room=${encodeURIComponent(roomCode)}`, {
       cache: 'no-store'
     });
     const payload = (await response.json()) as ApiResponse;
-    setRoom(payload.room);
-    setServerNow(payload.now);
-  }, [roomCode]);
+    if (pendingMutationsRef.current > 0 || mutationSeqRef.current !== mutationSeq) return;
+    applyRoomPayload(payload);
+  }, [applyRoomPayload, roomCode]);
 
   const postAction = useCallback(
     async (action: string, payload: Record<string, unknown> = {}) => {
-      const response = await fetch('/api/fraction-target', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, roomCode, ...payload })
-      });
+      if (pendingMutationsRef.current > 0) return;
 
-      if (!response.ok) return;
+      const mutationSeq = mutationSeqRef.current + 1;
+      mutationSeqRef.current = mutationSeq;
+      pendingMutationsRef.current += 1;
+      setIsMutating(true);
 
-      const nextPayload = (await response.json()) as ApiResponse;
-      setRoom(nextPayload.room);
-      setServerNow(nextPayload.now);
+      try {
+        const response = await fetch('/api/fraction-target', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action, roomCode, ...payload })
+        });
+
+        if (!response.ok) return;
+
+        const nextPayload = (await response.json()) as ApiResponse;
+        if (mutationSeqRef.current !== mutationSeq) return;
+        applyRoomPayload(nextPayload, { preserveMissingPlayers: action !== 'reset' });
+      } finally {
+        pendingMutationsRef.current = Math.max(0, pendingMutationsRef.current - 1);
+        if (pendingMutationsRef.current === 0) setIsMutating(false);
+      }
     },
-    [roomCode]
+    [applyRoomPayload, roomCode]
   );
 
   const createNewTeacherRoom = useCallback(() => {
     const nextRoomCode = createClientRoomCode(roomCode);
+    mutationSeqRef.current += 1;
+    pendingMutationsRef.current = 0;
+    completedTeacherClaimRef.current = false;
+    setIsMutating(false);
     setRoom(null);
     setRoomCode(nextRoomCode);
     setView('teacher');
@@ -106,19 +145,24 @@ export default function FractionTargetPage() {
     let mounted = true;
 
     async function claimRoom() {
+      if (pendingMutationsRef.current > 0) return;
+      const mutationSeq = mutationSeqRef.current;
+      const allowReassign = !completedTeacherClaimRef.current;
       const response = await fetch('/api/fraction-target', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'claimRoom', roomCode, teacherId })
+        body: JSON.stringify({ action: 'claimRoom', roomCode, teacherId, allowReassign })
       });
 
       if (!response.ok || !mounted) return;
 
       const payload = (await response.json()) as ApiResponse;
-      setRoom(payload.room);
-      setServerNow(payload.now);
+      if (pendingMutationsRef.current > 0 || mutationSeqRef.current !== mutationSeq) return;
+      applyRoomPayload(payload, { allowRoomChange: allowReassign });
+      completedTeacherClaimRef.current = true;
 
       if (payload.room.code !== roomCode) {
+        if (!allowReassign) return;
         setRoomCode(payload.room.code);
         const url = new URL(window.location.href);
         url.searchParams.set('view', 'teacher');
@@ -143,7 +187,7 @@ export default function FractionTargetPage() {
       mounted = false;
       window.clearInterval(timer);
     };
-  }, [roomCode, teacherId, view]);
+  }, [applyRoomPayload, roomCode, teacherId, view]);
 
   useEffect(() => {
     let mounted = true;
@@ -174,9 +218,10 @@ export default function FractionTargetPage() {
           <strong>분수를 알라! 준비 중</strong>
         </section>
       ) : view === 'student' ? (
-        <StudentScreen room={room} postAction={postAction} />
+        <StudentScreen isMutating={isMutating} room={room} postAction={postAction} />
       ) : (
         <TeacherBoard
+          isMutating={isMutating}
           onCreateNewRoom={createNewTeacherRoom}
           room={room}
           now={serverNow}
@@ -197,13 +242,76 @@ function createClientRoomCode(exceptCode?: string): string {
   return nextCode;
 }
 
+function mergeRoomSnapshot(current: RoomState, incoming: RoomState, options: ApplyRoomOptions): RoomState {
+  const preserveMissingPlayers = options.preserveMissingPlayers ?? true;
+
+  return {
+    ...incoming,
+    players: mergePlayers(current.players, incoming.players, preserveMissingPlayers),
+    round: mergeRound(current.round, incoming.round, preserveMissingPlayers)
+  };
+}
+
+function mergePlayers(
+  currentPlayers: RoomState['players'],
+  incomingPlayers: RoomState['players'],
+  preserveMissingPlayers: boolean
+): RoomState['players'] {
+  if (!preserveMissingPlayers) return incomingPlayers;
+
+  const merged = new Map(incomingPlayers.map((player) => [player.id, player]));
+  currentPlayers.forEach((player) => {
+    if (!player.isBot && !merged.has(player.id)) {
+      merged.set(player.id, player);
+    }
+  });
+
+  return Array.from(merged.values());
+}
+
+function mergeRound(
+  currentRound: RoomState['round'],
+  incomingRound: RoomState['round'],
+  preserveMissingSubmissions: boolean
+): RoomState['round'] {
+  const sameRunningRound =
+    currentRound.index === incomingRound.index &&
+    currentRound.question.id === incomingRound.question.id &&
+    Boolean(currentRound.startedAt && incomingRound.startedAt && currentRound.startedAt === incomingRound.startedAt);
+
+  if (!sameRunningRound || !preserveMissingSubmissions) return incomingRound;
+
+  const statusOrder = { lobby: 0, active: 1, revealed: 2 } satisfies Record<RoomState['round']['status'], number>;
+  const keepCurrentStatus = statusOrder[incomingRound.status] < statusOrder[currentRound.status];
+
+  return {
+    ...incomingRound,
+    status: keepCurrentStatus ? currentRound.status : incomingRound.status,
+    revealedAt: keepCurrentStatus ? currentRound.revealedAt : incomingRound.revealedAt,
+    submissions: mergeSubmissions(currentRound.submissions, incomingRound.submissions)
+  };
+}
+
+function mergeSubmissions(currentSubmissions: Submission[], incomingSubmissions: Submission[]): Submission[] {
+  const merged = new Map(incomingSubmissions.map((submission) => [submission.playerId, submission]));
+  currentSubmissions.forEach((submission) => {
+    if (!merged.has(submission.playerId)) {
+      merged.set(submission.playerId, submission);
+    }
+  });
+
+  return Array.from(merged.values()).sort((left, right) => left.submittedAt - right.submittedAt);
+}
+
 function TeacherBoard({
+  isMutating,
   onCreateNewRoom,
   room,
   now,
   studentUrl,
   postAction
 }: {
+  isMutating: boolean;
   onCreateNewRoom: () => void;
   room: RoomState;
   now: number;
@@ -257,7 +365,7 @@ function TeacherBoard({
                 </div>
                 <b>{questionBank.length}문제</b>
               </div>
-              <QuestionPicker currentIndex={round.index} postAction={postAction} />
+              <QuestionPicker currentIndex={round.index} disabled={isMutating} postAction={postAction} />
             </section>
 
             <section className={styles.lobbyTopBar}>
@@ -278,18 +386,24 @@ function TeacherBoard({
               </div>
 
               <div className={styles.lobbyActions}>
-                <button className={styles.primaryButton} onClick={() => postAction('startRound')} type="button">
+                <button
+                  className={styles.primaryButton}
+                  disabled={isMutating}
+                  onClick={() => postAction('startRound')}
+                  type="button"
+                >
                   <Play size={24} /> 게임 시작
                 </button>
                 <button
                   className={styles.secondaryActionButton}
+                  disabled={isMutating}
                   onClick={() => postAction('setQuestion', { value: getRandomQuestionIndex(round.index) })}
                   type="button"
                 >
                   <Shuffle size={22} />
                   랜덤 문제
                 </button>
-                <button className={styles.secondaryActionButton} onClick={onCreateNewRoom} type="button">
+                <button className={styles.secondaryActionButton} disabled={isMutating} onClick={onCreateNewRoom} type="button">
                   <Plus size={22} />
                   새 방 만들기
                 </button>
@@ -325,6 +439,7 @@ function TeacherBoard({
                   <button
                     aria-pressed={showRanking}
                     className={styles.rankToggle}
+                    disabled={isMutating}
                     onClick={() => postAction('setRankingVisible', { value: !showRanking })}
                     type="button"
                   >
@@ -362,11 +477,11 @@ function TeacherBoard({
 
               <div className={styles.controlDock}>
                 {round.status === 'active' ? (
-                  <button className={styles.primaryButton} onClick={() => postAction('reveal')} type="button">
+                  <button className={styles.primaryButton} disabled={isMutating} onClick={() => postAction('reveal')} type="button">
                     <Sparkles size={23} /> 정답 공개
                   </button>
                 ) : (
-                  <button className={styles.primaryButton} onClick={() => postAction('nextRound')} type="button">
+                  <button className={styles.primaryButton} disabled={isMutating} onClick={() => postAction('nextRound')} type="button">
                     <Play size={23} /> 다음 문제
                   </button>
                 )}
@@ -380,10 +495,12 @@ function TeacherBoard({
 }
 
 function StudentScreen({
+  isMutating,
   room,
   postAction,
   compact = false
 }: {
+  isMutating: boolean;
   room: RoomState;
   postAction: (action: string, payload?: Record<string, unknown>) => Promise<void>;
   compact?: boolean;
@@ -420,6 +537,7 @@ function StudentScreen({
   }, [round.question.id, round.question.max, round.question.min]);
 
   async function joinRoom() {
+    if (isMutating) return;
     const id = playerId || `student-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     const name = studentName.trim() || '학생';
     setPlayerId(id);
@@ -431,6 +549,7 @@ function StudentScreen({
   }
 
   async function submitGuess() {
+    if (isMutating) return;
     await postAction('submit', {
       playerId,
       name: studentName,
@@ -479,7 +598,7 @@ function StudentScreen({
                 </button>
               ))}
             </div>
-            <button className={styles.phonePrimary} onClick={joinRoom} type="button">
+            <button className={styles.phonePrimary} disabled={isMutating} onClick={joinRoom} type="button">
               <Send size={20} /> 입장
             </button>
           </div>
@@ -517,7 +636,7 @@ function StudentScreen({
                 <span key={tick}>{formatTick(tick)}</span>
               ))}
             </div>
-            <button className={styles.phonePrimary} onClick={submitGuess} type="button">
+            <button className={styles.phonePrimary} disabled={isMutating} onClick={submitGuess} type="button">
               <Target size={21} /> 제출
             </button>
           </div>
@@ -626,9 +745,11 @@ function NumberLine({ room, now, submissions }: { room: RoomState; now: number; 
 
 function QuestionPicker({
   currentIndex,
+  disabled,
   postAction
 }: {
   currentIndex: number;
+  disabled: boolean;
   postAction: (action: string, payload?: Record<string, unknown>) => Promise<void>;
 }) {
   const currentQuestion = questionBank[currentIndex] ?? questionBank[0];
@@ -641,6 +762,7 @@ function QuestionPicker({
     .sort((left, right) => left.question.levelIndex - right.question.levelIndex);
 
   const selectQuestion = (level: number, levelIndex: number) => {
+    if (disabled) return;
     const nextIndex = questionBank.findIndex((question) => question.level === level && question.levelIndex === levelIndex);
     if (nextIndex >= 0) {
       void postAction('setQuestion', { value: nextIndex });
@@ -667,6 +789,7 @@ function QuestionPicker({
             {levels.map((level) => (
               <button
                 aria-pressed={level === selectedLevel}
+                disabled={disabled}
                 key={level}
                 onClick={() => selectQuestion(level, selectedNumber)}
                 title={`Lv${level}`}
@@ -684,6 +807,7 @@ function QuestionPicker({
             {selectedLevelQuestions.map(({ question }) => (
               <button
                 aria-pressed={question.levelIndex === selectedNumber}
+                disabled={disabled}
                 key={question.id}
                 onClick={() => selectQuestion(selectedLevel, question.levelIndex)}
                 title={`${question.label} = ${formatResultFraction(question)} = ${formatDecimal(fractionValue(question))}`}
@@ -887,8 +1011,10 @@ function LongDivisionBoard({ work }: { work: LongDivisionWork }) {
           const startColumn = step.startColumn;
           const workingDigits = String(step.workingDividend).split('');
           const productDigits = String(step.product).split('');
+          const stepDigitLength = Math.max(workingDigits.length, productDigits.length);
           const lineStartX = digitX(startColumn) - 12;
-          const lineEndX = digitX(startColumn + Math.max(workingDigits.length, productDigits.length) - 1) + 12;
+          const lineEndX = digitX(startColumn + stepDigitLength - 1) + 12;
+          const showFinalZero = !work.hasMore && step.remainder === 0 && index === work.steps.length - 1;
 
           return (
             <g key={`${step.workingDividend}-${index}`}>
@@ -915,6 +1041,11 @@ function LongDivisionBoard({ work }: { work: LongDivisionWork }) {
                 </text>
               ))}
               <line className={styles.longDivisionSubline} x1={lineStartX} x2={lineEndX} y1={y + 35} y2={y + 35} />
+              {showFinalZero ? (
+                <text className={styles.longDivisionNumber} textAnchor="middle" x={digitX(startColumn + stepDigitLength - 1)} y={y + 61}>
+                  0
+                </text>
+              ) : null}
             </g>
           );
         })}
@@ -924,7 +1055,7 @@ function LongDivisionBoard({ work }: { work: LongDivisionWork }) {
           </text>
         ) : null}
       </svg>
-      <p className={styles.longDivisionHint}>{work.decimalPlaces > 0 ? '나머지에 0 붙임' : '나누어떨어져요'}</p>
+      <p className={styles.longDivisionHint}>{work.hasMore ? '같은 나머지가 반복돼요.' : '나누어떨어져요'}</p>
     </div>
   );
 }

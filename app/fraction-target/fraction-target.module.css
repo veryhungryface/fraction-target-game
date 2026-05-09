@@ -328,6 +328,18 @@
   transform: translateY(-2px);
 }
 
+.primaryButton:disabled,
+.secondaryActionButton:disabled,
+.phonePrimary:disabled,
+.questionPicker button:disabled,
+.teamPicker button:disabled,
+.rankToggle:disabled {
+  cursor: wait;
+  opacity: 0.54;
+  transform: none;
+  box-shadow: none;
+}
+
 .secondaryActionButton {
   min-width: 0;
   min-height: clamp(58px, 4.6vw, 76px);
