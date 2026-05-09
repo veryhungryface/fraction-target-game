@@ -23,6 +23,7 @@ import {
   positionPct,
   questionBank,
   teams,
+  type FractionQuestion,
   type RoomState,
   type Submission,
   type TeamId
@@ -159,7 +160,7 @@ export default function FractionTargetPage() {
       {!room ? (
         <section className={styles.loadingPanel}>
           <Target size={42} />
-          <strong>분수 과녁 준비 중</strong>
+          <strong>분수를 알라! 준비 중</strong>
         </section>
       ) : view === 'student' ? (
         <StudentScreen room={room} postAction={postAction} />
@@ -206,8 +207,8 @@ function TeacherBoard({
               <Target size={30} />
             </span>
             <div>
-              <p>FRACTION TARGET</p>
-              <h1>딱 거기! 분수 과녁</h1>
+              <p>FRACTION DECIMAL TARGET</p>
+              <h1>{room.title}</h1>
             </div>
           </div>
 
@@ -223,13 +224,15 @@ function TeacherBoard({
             <section className={styles.lobbyHero}>
               <div className={styles.roundBadge}>
                 {round.question.boss ? <Crown size={18} /> : <Flag size={18} />}
-                {round.question.boss ? '보스전' : `${round.index + 1}라운드`}
+                {round.question.levelTitle} · {round.question.levelIndex}번
               </div>
               <h2>
-                <FractionBadge label={round.question.label} />
+                <QuestionExpression label={round.question.label} />
                 <span>는 어디일까?</span>
               </h2>
-              <p>0과 1 사이에서 딱 맞는 위치를 찾아요.</p>
+              <p>
+                {formatRange(round.question)} 수직선에서 계산 결과의 소수 위치를 찾아요.
+              </p>
               <div className={styles.lobbyActions}>
                 <button className={styles.primaryButton} onClick={() => postAction('startRound')} type="button">
                   <Play size={24} /> 게임 시작
@@ -266,9 +269,11 @@ function TeacherBoard({
           <div className={styles.roundLayout}>
             <section className={styles.questionBanner}>
               <div>
-                <p>{round.question.boss ? 'BOSS ROUND' : `ROUND ${round.index + 1}`}</p>
+                <p>
+                  {round.question.levelTitle} · {round.question.objective}
+                </p>
                 <h2>
-                  <FractionBadge label={round.question.label} />
+                  <QuestionExpression label={round.question.label} />
                   <span>는 어디일까?</span>
                 </h2>
               </div>
@@ -363,8 +368,8 @@ function StudentScreen({
   }, []);
 
   useEffect(() => {
-    setGuess(0.5);
-  }, [round.question.id]);
+    setGuess((round.question.min + round.question.max) / 2);
+  }, [round.question.id, round.question.max, round.question.min]);
 
   async function joinRoom() {
     const id = playerId || `student-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
@@ -392,8 +397,8 @@ function StudentScreen({
         <div className={styles.phoneSensor} />
         <header className={styles.phoneHeader}>
           <div>
-            <p>딱 거기!</p>
-            <strong>분수 과녁</strong>
+            <p>소수 위치 찾기</p>
+            <strong>분수를 알라!</strong>
           </div>
           <span style={{ '--team': getTeam(player?.team ?? selectedTeam).color } as CSSProperties}>
             {player ? getTeam(player.team).name : getTeam(selectedTeam).name}
@@ -433,18 +438,20 @@ function StudentScreen({
         ) : round.status === 'active' && !submission ? (
           <div className={styles.playCard}>
             <div className={styles.mobileQuestion}>
-              <span>{round.question.boss ? '보스전' : `${round.index + 1}라운드`}</span>
+              <span>
+                {round.question.levelTitle} · {formatRange(round.question)}
+              </span>
               <h2>
-                <FractionBadge label={round.question.label} />
+                <QuestionExpression label={round.question.label} compact />
                 <em>은 어디일까?</em>
               </h2>
             </div>
             <div className={styles.sliderReadout}>
-              <b>{Math.round(guessPct)}%</b>
-              <span>{guess.toFixed(3)}</span>
+              <b>{formatDecimal(guess)}</b>
+              <span>내가 찍은 값</span>
             </div>
             <label className={styles.sliderShell}>
-              <span>0</span>
+              <span>{formatDecimal(round.question.min)}</span>
               <input
                 aria-label="분수 위치 슬라이더"
                 max={round.question.max}
@@ -455,12 +462,12 @@ function StudentScreen({
                 type="range"
                 value={guess}
               />
-              <span>1</span>
+              <span>{formatDecimal(round.question.max)}</span>
             </label>
             <div className={styles.landmarks}>
-              <span>0</span>
-              <span>1/2</span>
-              <span>1</span>
+              {createTicks(round.question).map((tick) => (
+                <span key={tick}>{formatTick(tick)}</span>
+              ))}
             </div>
             <button className={styles.phonePrimary} onClick={submitGuess} type="button">
               <Target size={21} /> 제출
@@ -476,7 +483,7 @@ function StudentScreen({
             <section className={styles.decimalLesson}>
               <p>분수를 소수로 바꾸면</p>
               <h2>
-                {round.question.label} {answerSign} {answerDecimal}
+                {formatResultFraction(round.question)} {answerSign} {answerDecimal}
               </h2>
               <LongDivisionBoard work={divisionWork} />
             </section>
@@ -522,7 +529,7 @@ function NumberLine({ room, now, submissions }: { room: RoomState; now: number; 
   const question = round.question;
   const answer = fractionValue(question);
   const answerPct = positionPct(answer, question.min, question.max);
-  const ticks = [0, 0.25, 0.5, 0.75, 1];
+  const ticks = createTicks(question);
 
   return (
     <section className={styles.numberLineStage}>
@@ -535,7 +542,7 @@ function NumberLine({ room, now, submissions }: { room: RoomState; now: number; 
             style={{ '--x': `${positionPct(tick, question.min, question.max)}%` } as CSSProperties}
           >
             <i />
-            <b>{tick === 0.5 ? '1/2' : tick}</b>
+            <b>{formatTick(tick)}</b>
           </span>
         ))}
 
@@ -562,8 +569,8 @@ function NumberLine({ room, now, submissions }: { room: RoomState; now: number; 
         ) : null}
       </div>
       <div className={styles.lineLabels}>
-        <span>0</span>
-        <span>1</span>
+        <span>{formatDecimal(question.min)}</span>
+        <span>{formatDecimal(question.max)}</span>
       </div>
     </section>
   );
@@ -576,18 +583,39 @@ function QuestionPicker({
   currentIndex: number;
   postAction: (action: string, payload?: Record<string, unknown>) => Promise<void>;
 }) {
+  const groups = questionBank.reduce<Array<{ level: number; title: string; questions: Array<{ question: FractionQuestion; index: number }> }>>(
+    (acc, question, index) => {
+      const group = acc.find((candidate) => candidate.level === question.level);
+      if (group) {
+        group.questions.push({ question, index });
+      } else {
+        acc.push({ level: question.level, title: question.levelTitle, questions: [{ question, index }] });
+      }
+      return acc;
+    },
+    []
+  );
+
   return (
     <div className={styles.questionPicker}>
-      {questionBank.map((question, index) => (
-        <button
-          className={index === currentIndex ? styles.currentQuestion : undefined}
-          key={question.id}
-          onClick={() => postAction('setQuestion', { value: index })}
-          type="button"
-        >
-          {question.boss ? <Crown size={16} /> : null}
-          {question.label}
-        </button>
+      {groups.map((group) => (
+        <section className={styles.questionLevel} key={group.level}>
+          <h3>{group.title}</h3>
+          <div>
+            {group.questions.map(({ question, index }) => (
+              <button
+                className={index === currentIndex ? styles.currentQuestion : undefined}
+                key={question.id}
+                onClick={() => postAction('setQuestion', { value: index })}
+                title={`${question.label} = ${formatResultFraction(question)} = ${formatDecimal(fractionValue(question))}`}
+                type="button"
+              >
+                {question.boss ? <Crown size={15} /> : null}
+                {question.levelIndex}
+              </button>
+            ))}
+          </div>
+        </section>
       ))}
     </div>
   );
@@ -648,6 +676,26 @@ function StatPill({ icon, label, value }: { icon: React.ReactNode; label: string
   );
 }
 
+function QuestionExpression({ label, compact = false }: { label: string; compact?: boolean }) {
+  const tokens = label.replaceAll('(', ' ( ').replaceAll(')', ' ) ').trim().split(/\s+/);
+
+  return (
+    <span className={styles.questionExpression} data-compact={compact}>
+      {tokens.map((token, index) => {
+        if (/^\d+\/\d+$/.test(token)) {
+          return <FractionBadge key={`${token}-${index}`} label={token} />;
+        }
+
+        return (
+          <span className={styles.expressionToken} key={`${token}-${index}`}>
+            {token}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
 function FractionBadge({ label }: { label: string }) {
   const [numerator, denominator] = label.split('/');
 
@@ -664,6 +712,7 @@ type LongDivisionStep = {
   workingDividend: number;
   product: number;
   remainder: number;
+  startColumn: number;
 };
 
 type LongDivisionWork = {
@@ -672,25 +721,30 @@ type LongDivisionWork = {
   integerPart: number;
   quotientDigits: number[];
   quotient: string;
+  decimalPlaces: number;
+  integerDigitCount: number;
   steps: LongDivisionStep[];
   hasMore: boolean;
 };
 
 function LongDivisionBoard({ work }: { work: LongDivisionWork }) {
-  const columnWidth = 24;
-  const integerX = 84;
-  const decimalPointX = 108;
-  const digitX = (column: number) => (column === 0 ? integerX : 132 + (column - 1) * columnWidth);
+  const columnWidth = 25;
+  const bracketX = 78;
+  const baseX = 112;
+  const decimalPointX = baseX + (work.integerDigitCount - 0.5) * columnWidth;
+  const digitX = (column: number) => baseX + column * columnWidth;
   const stepHeight = 58;
   const dividendY = 78;
   const firstStepY = 118;
-  const bracketX = 58;
   const bracketEndY = dividendY + 12;
   const finalY = firstStepY + Math.max(1, work.steps.length - 1) * stepHeight + 46;
   const viewHeight = finalY + 20;
-  const dividendDecimalPlaces = Math.max(1, work.quotientDigits.length);
+  const totalDigitColumns = work.integerDigitCount + work.decimalPlaces;
+  const viewWidth = Math.max(300, digitX(Math.max(totalDigitColumns - 1, work.integerDigitCount)) + 62);
   const dividendDigits = String(work.numerator).split('');
-  const dividendIntegerStartColumn = Math.max(0, 1 - dividendDigits.length);
+  const quotientIntegerDigits = String(work.integerPart).split('');
+  const dividendIntegerStartColumn = Math.max(0, work.integerDigitCount - dividendDigits.length);
+  const quotientIntegerStartColumn = Math.max(0, work.integerDigitCount - quotientIntegerDigits.length);
 
   return (
     <div className={styles.longDivisionBoard}>
@@ -701,33 +755,48 @@ function LongDivisionBoard({ work }: { work: LongDivisionWork }) {
         aria-label={`${work.numerator} 나누기 ${work.divisor} 긴 나눗셈`}
         className={styles.longDivisionCanvas}
         role="img"
-        viewBox={`0 0 260 ${viewHeight}`}
+        viewBox={`0 0 ${viewWidth} ${viewHeight}`}
       >
-        <text className={styles.longDivisionQuotientText} textAnchor="middle" x={digitX(0)} y="34">
-          {work.integerPart}
-        </text>
-        <text className={styles.longDivisionQuotientText} textAnchor="middle" x={decimalPointX} y="34">
-          .
-        </text>
+        {quotientIntegerDigits.map((digit, index) => (
+          <text
+            className={styles.longDivisionQuotientText}
+            key={`qi-${digit}-${index}`}
+            textAnchor="middle"
+            x={digitX(quotientIntegerStartColumn + index)}
+            y="34"
+          >
+            {digit}
+          </text>
+        ))}
+        {work.decimalPlaces > 0 ? (
+          <text className={styles.longDivisionQuotientText} textAnchor="middle" x={decimalPointX} y="34">
+            .
+          </text>
+        ) : null}
         {work.quotientDigits.map((digit, index) => (
           <text
             className={styles.longDivisionQuotientText}
             key={`q-${digit}-${index}`}
             textAnchor="middle"
-            x={digitX(index + 1)}
+            x={digitX(work.integerDigitCount + index)}
             y="34"
           >
             {digit}
           </text>
         ))}
         {work.hasMore ? (
-          <text className={styles.longDivisionQuotientText} textAnchor="middle" x={digitX(work.quotientDigits.length + 1)} y="34">
+          <text
+            className={styles.longDivisionQuotientText}
+            textAnchor="middle"
+            x={digitX(work.integerDigitCount + work.quotientDigits.length)}
+            y="34"
+          >
             …
           </text>
         ) : null}
-        <line className={styles.longDivisionDivider} x1={bracketX} x2="210" y1="52" y2="52" />
+        <line className={styles.longDivisionDivider} x1={bracketX} x2={viewWidth - 34} y1="52" y2="52" />
         <line className={styles.longDivisionDivider} x1={bracketX} x2={bracketX} y1="52" y2={bracketEndY} />
-        <text className={styles.longDivisionNumber} textAnchor="end" x="46" y={dividendY}>
+        <text className={styles.longDivisionNumber} textAnchor="end" x="66" y={dividendY}>
           {work.divisor}
         </text>
         {dividendDigits.map((digit, index) => (
@@ -741,17 +810,19 @@ function LongDivisionBoard({ work }: { work: LongDivisionWork }) {
             {digit}
           </text>
         ))}
-        <text className={styles.longDivisionDividendText} textAnchor="middle" x={decimalPointX} y={dividendY}>
-          .
-        </text>
-        {Array.from({ length: dividendDecimalPlaces }).map((_, index) => (
-          <text className={styles.longDivisionDividendText} key={`zero-${index}`} textAnchor="middle" x={digitX(index + 1)} y={dividendY}>
+        {work.decimalPlaces > 0 ? (
+          <text className={styles.longDivisionDividendText} textAnchor="middle" x={decimalPointX} y={dividendY}>
+            .
+          </text>
+        ) : null}
+        {Array.from({ length: work.decimalPlaces }).map((_, index) => (
+          <text className={styles.longDivisionDividendText} key={`zero-${index}`} textAnchor="middle" x={digitX(work.integerDigitCount + index)} y={dividendY}>
             0
           </text>
         ))}
         {work.steps.map((step, index) => {
           const y = firstStepY + index * stepHeight;
-          const startColumn = index;
+          const startColumn = step.startColumn;
           const workingDigits = String(step.workingDividend).split('');
           const productDigits = String(step.product).split('');
           const lineStartX = digitX(startColumn) - 12;
@@ -786,12 +857,12 @@ function LongDivisionBoard({ work }: { work: LongDivisionWork }) {
           );
         })}
         {work.hasMore ? (
-          <text className={styles.longDivisionRemainder} textAnchor="start" x={digitX(work.steps.length)} y={finalY}>
+          <text className={styles.longDivisionRemainder} textAnchor="start" x={digitX(work.integerDigitCount + work.quotientDigits.length)} y={finalY}>
             반복
           </text>
         ) : null}
       </svg>
-      <p className={styles.longDivisionHint}>나머지에 0 붙임</p>
+      <p className={styles.longDivisionHint}>{work.decimalPlaces > 0 ? '나머지에 0 붙임' : '나누어떨어져요'}</p>
     </div>
   );
 }
@@ -802,6 +873,16 @@ function createLongDivisionWork(numerator: number, denominator: number): LongDiv
   const digits: number[] = [];
   const steps: LongDivisionStep[] = [];
   const maxDigits = 3;
+  const integerDigitCount = Math.max(String(numerator).length, String(integerPart).length, 1);
+
+  if (integerPart > 0) {
+    steps.push({
+      workingDividend: numerator,
+      product: integerPart * denominator,
+      remainder,
+      startColumn: Math.max(0, integerDigitCount - String(numerator).length)
+    });
+  }
 
   for (let index = 0; index < maxDigits && remainder !== 0; index += 1) {
     const workingDividend = remainder * 10;
@@ -810,7 +891,12 @@ function createLongDivisionWork(numerator: number, denominator: number): LongDiv
     remainder = workingDividend - product;
 
     digits.push(digit);
-    steps.push({ workingDividend, product, remainder });
+    steps.push({
+      workingDividend,
+      product,
+      remainder,
+      startColumn: Math.max(0, integerDigitCount + index - String(workingDividend).length + 1)
+    });
   }
 
   return {
@@ -819,6 +905,8 @@ function createLongDivisionWork(numerator: number, denominator: number): LongDiv
     integerPart,
     quotientDigits: digits,
     quotient: digits.length > 0 ? `${integerPart}.${digits.join('')}${remainder === 0 ? '' : '...'}` : `${integerPart}`,
+    decimalPlaces: digits.length,
+    integerDigitCount,
     steps,
     hasMore: remainder !== 0
   };
@@ -826,6 +914,31 @@ function createLongDivisionWork(numerator: number, denominator: number): LongDiv
 
 function formatDecimal(value: number): string {
   return value.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
+}
+
+function formatResultFraction(question: FractionQuestion): string {
+  if (question.denominator === 1) return String(question.numerator);
+  return `${question.numerator}/${question.denominator}`;
+}
+
+function formatRange(question: FractionQuestion): string {
+  return `${formatDecimal(question.min)}~${formatDecimal(question.max)}`;
+}
+
+function createTicks(question: FractionQuestion): number[] {
+  const { min, max } = question;
+
+  if (max <= 1) return [0, 0.25, 0.5, 0.75, 1];
+  if (max <= 3) return Array.from({ length: max * 2 + 1 }, (_, index) => min + index * 0.5);
+
+  return Array.from({ length: max - min + 1 }, (_, index) => min + index);
+}
+
+function formatTick(value: number): string {
+  if (value === 0.25) return '1/4';
+  if (value === 0.5) return '1/2';
+  if (value === 0.75) return '3/4';
+  return formatDecimal(value);
 }
 
 function isTerminatingDecimal(numerator: number, denominator: number): boolean {
