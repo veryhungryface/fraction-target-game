@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" role="img" aria-label="Number line field background">
+  <defs>
+    <linearGradient id="field" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f8fbf0"/>
+      <stop offset=".45" stop-color="#eaf8f5"/>
+      <stop offset="1" stop-color="#fff0e8"/>
+    </linearGradient>
+    <radialGradient id="radar" cx=".65" cy=".44" r=".58">
+      <stop offset="0" stop-color="#00a7a5" stop-opacity=".24"/>
+      <stop offset=".45" stop-color="#f5b82e" stop-opacity=".14"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="80" height="80" patternUnits="userSpaceOnUse">
+      <path d="M80 0H0V80" fill="none" stroke="#10201f" stroke-opacity=".045" stroke-width="2"/>
+    </pattern>
+  </defs>
+  <rect width="1600" height="900" fill="url(#field)"/>
+  <rect width="1600" height="900" fill="url(#grid)"/>
+  <circle cx="1060" cy="395" r="520" fill="url(#radar)"/>
+  <g fill="none" stroke-linecap="round">
+    <path d="M135 680C350 555 527 618 720 522c244-121 419-308 742-239" stroke="#13201f" stroke-opacity=".07" stroke-width="16"/>
+    <path d="M164 670C386 575 569 624 754 514c221-132 433-276 705-233" stroke="#00a7a5" stroke-opacity=".12" stroke-width="8"/>
+    <path d="M1060 111v566M777 394h566" stroke="#13201f" stroke-opacity=".05" stroke-width="5"/>
+    <circle cx="1060" cy="394" r="96" stroke="#f45d48" stroke-opacity=".22" stroke-width="14"/>
+    <circle cx="1060" cy="394" r="190" stroke="#00a7a5" stroke-opacity=".14" stroke-width="10"/>
+    <circle cx="1060" cy="394" r="286" stroke="#f5b82e" stroke-opacity=".13" stroke-width="8"/>
+  </g>
+  <g opacity=".2">
+    <circle cx="282" cy="206" r="18" fill="#f45d48"/>
+    <circle cx="365" cy="294" r="11" fill="#536dff"/>
+    <circle cx="1260" cy="674" r="14" fill="#00a7a5"/>
+    <circle cx="1355" cy="588" r="9" fill="#f5b82e"/>
+    <rect x="101" y="409" width="58" height="22" rx="11" fill="#13201f"/>
+    <rect x="1382" y="177" width="76" height="28" rx="14" fill="#f45d48"/>
+  </g>
+</svg>

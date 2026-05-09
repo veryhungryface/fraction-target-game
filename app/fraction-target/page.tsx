@@ -1,0 +1,859 @@
+'use client';
+
+import {
+  Crown,
+  Crosshair,
+  Flag,
+  Gauge,
+  Monitor,
+  Play,
+  QrCode,
+  Radio,
+  RotateCcw,
+  Send,
+  Smartphone,
+  Sparkles,
+  Target,
+  Timer,
+  Trophy,
+  UsersRound
+} from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
+import {
+  fractionValue,
+  getTeam,
+  positionPct,
+  questionBank,
+  teams,
+  type RoomState,
+  type Submission,
+  type TeamId
+} from '@/lib/fractionTarget';
+import styles from './fraction-target.module.css';
+
+type ViewMode = 'teacher' | 'student' | 'studio';
+type ApiResponse = {
+  room: RoomState;
+  now: number;
+};
+
+const defaultRoomCode = '4827';
+
+export default function FractionTargetPage() {
+  const [roomCode, setRoomCode] = useState(defaultRoomCode);
+  const [view, setView] = useState<ViewMode>('teacher');
+  const [room, setRoom] = useState<RoomState | null>(null);
+  const [serverNow, setServerNow] = useState(Date.now());
+  const [origin, setOrigin] = useState('');
+
+  const loadRoom = useCallback(async () => {
+    const response = await fetch(`/api/fraction-target?room=${encodeURIComponent(roomCode)}`, {
+      cache: 'no-store'
+    });
+    const payload = (await response.json()) as ApiResponse;
+    setRoom(payload.room);
+    setServerNow(payload.now);
+  }, [roomCode]);
+
+  const postAction = useCallback(
+    async (action: string, payload: Record<string, unknown> = {}) => {
+      const response = await fetch('/api/fraction-target', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, roomCode, ...payload })
+      });
+
+      if (!response.ok) return;
+
+      const nextPayload = (await response.json()) as ApiResponse;
+      setRoom(nextPayload.room);
+      setServerNow(nextPayload.now);
+    },
+    [roomCode]
+  );
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const paramRoom = params.get('room');
+    const paramView = params.get('view');
+
+    if (paramRoom) setRoomCode(paramRoom);
+    if (paramView === 'student' || paramView === 'studio' || paramView === 'teacher') {
+      setView(paramView);
+    }
+    setOrigin(window.location.origin);
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function poll() {
+      if (!mounted) return;
+      await loadRoom().catch(() => undefined);
+    }
+
+    poll();
+    const timer = window.setInterval(poll, 900);
+    return () => {
+      mounted = false;
+      window.clearInterval(timer);
+    };
+  }, [loadRoom]);
+
+  const studentUrl = useMemo(() => {
+    if (!origin) return '';
+    return `${origin}/fraction-target?view=student&room=${roomCode}`;
+  }, [origin, roomCode]);
+
+  function changeView(nextView: ViewMode) {
+    setView(nextView);
+    const url = new URL(window.location.href);
+    url.searchParams.set('view', nextView);
+    url.searchParams.set('room', roomCode);
+    window.history.replaceState(null, '', url);
+  }
+
+  return (
+    <main className={styles.app} data-view={view}>
+      <div className={styles.modeBar} aria-label="화면 선택">
+        <button
+          className={view === 'teacher' ? styles.activeMode : undefined}
+          onClick={() => changeView('teacher')}
+          type="button"
+        >
+          <Monitor size={18} /> 교사용
+        </button>
+        <button
+          className={view === 'student' ? styles.activeMode : undefined}
+          onClick={() => changeView('student')}
+          type="button"
+        >
+          <Smartphone size={18} /> 학생용
+        </button>
+        <button
+          className={view === 'studio' ? styles.activeMode : undefined}
+          onClick={() => changeView('studio')}
+          type="button"
+        >
+          <Sparkles size={18} /> 전체 시안
+        </button>
+      </div>
+
+      {!room ? (
+        <section className={styles.loadingPanel}>
+          <Target size={42} />
+          <strong>분수 과녁 준비 중</strong>
+        </section>
+      ) : view === 'student' ? (
+        <StudentScreen room={room} postAction={postAction} />
+      ) : view === 'studio' ? (
+        <section className={styles.studioGrid}>
+          <TeacherBoard room={room} now={serverNow} studentUrl={studentUrl} postAction={postAction} />
+          <StudentScreen room={room} postAction={postAction} compact />
+        </section>
+      ) : (
+        <TeacherBoard room={room} now={serverNow} studentUrl={studentUrl} postAction={postAction} />
+      )}
+    </main>
+  );
+}
+
+function TeacherBoard({
+  room,
+  now,
+  studentUrl,
+  postAction
+}: {
+  room: RoomState;
+  now: number;
+  studentUrl: string;
+  postAction: (action: string, payload?: Record<string, unknown>) => Promise<void>;
+}) {
+  const round = room.round;
+  const visibleSubmissions = getVisibleSubmissions(room, now);
+  const fullSubmissions = round.submissions;
+  const secondsLeft = getSecondsLeft(room, now);
+  const answer = fractionValue(round.question);
+  const submittedCount = visibleSubmissions.length;
+  const playerCount = room.players.length;
+  const ranked = [...(round.status === 'revealed' ? fullSubmissions : visibleSubmissions)]
+    .sort((left, right) => left.errorPct - right.errorPct || right.score - left.score)
+    .slice(0, 5);
+
+  return (
+    <section className={styles.teacherWrap}>
+      <div className={styles.teacherBoard} data-phase={round.status}>
+        <div className={styles.boardTexture} />
+        <header className={styles.boardHeader}>
+          <div className={styles.brandLockup}>
+            <span className={styles.logoMark}>
+              <Target size={30} />
+            </span>
+            <div>
+              <p>FRACTION TARGET</p>
+              <h1>딱 거기! 분수 과녁</h1>
+            </div>
+          </div>
+
+          <div className={styles.liveStats} aria-label="게임 상태">
+            <StatPill icon={<UsersRound size={20} />} label="접속" value={`${playerCount}명`} />
+            <StatPill icon={<Send size={20} />} label="제출" value={`${submittedCount}/${playerCount}`} />
+            <StatPill icon={<Timer size={20} />} label="남은 시간" value={`${secondsLeft}초`} />
+          </div>
+        </header>
+
+        {round.status === 'lobby' ? (
+          <div className={styles.lobbyLayout}>
+            <section className={styles.lobbyHero}>
+              <div className={styles.roundBadge}>
+                {round.question.boss ? <Crown size={18} /> : <Flag size={18} />}
+                {round.question.boss ? '보스전' : `${round.index + 1}라운드`}
+              </div>
+              <h2>
+                <FractionBadge label={round.question.label} />
+                <span>는 어디일까?</span>
+              </h2>
+              <p>0과 1 사이에서 딱 맞는 위치를 찾아요.</p>
+              <div className={styles.lobbyActions}>
+                <button className={styles.primaryButton} onClick={() => postAction('startRound')} type="button">
+                  <Play size={24} /> 게임 시작
+                </button>
+                <button className={styles.iconButton} onClick={() => postAction('seedDemo')} title="샘플 반 채우기" type="button">
+                  <UsersRound size={22} />
+                </button>
+                <button className={styles.iconButton} onClick={() => postAction('reset')} title="방 초기화" type="button">
+                  <RotateCcw size={22} />
+                </button>
+              </div>
+              <QuestionPicker currentIndex={round.index} postAction={postAction} />
+            </section>
+
+            <aside className={styles.qrPanel}>
+              <div className={styles.qrHeader}>
+                <QrCode size={24} />
+                <span>방 코드 {room.code}</span>
+              </div>
+              {studentUrl ? (
+                <img
+                  alt="학생 접속 QR"
+                  className={styles.qrImage}
+                  src={`/api/fraction-target/qr?text=${encodeURIComponent(studentUrl)}`}
+                />
+              ) : (
+                <div className={styles.qrFallback} />
+              )}
+              <p>{studentUrl || 'http://localhost:3012/fraction-target'}</p>
+              <TeamRoster players={room.players} />
+            </aside>
+          </div>
+        ) : (
+          <div className={styles.roundLayout}>
+            <section className={styles.questionBanner}>
+              <div>
+                <p>{round.question.boss ? 'BOSS ROUND' : `ROUND ${round.index + 1}`}</p>
+                <h2>
+                  <FractionBadge label={round.question.label} />
+                  <span>는 어디일까?</span>
+                </h2>
+              </div>
+              <div className={styles.answerBadge} data-visible={round.status === 'revealed'}>
+                <Crosshair size={22} />
+                {round.status === 'revealed' ? `정답 ${answer.toFixed(3)}` : '정답 숨김'}
+              </div>
+            </section>
+
+            <NumberLine room={room} now={now} submissions={visibleSubmissions} />
+
+            <aside className={styles.resultRail}>
+              <div className={styles.resultCard}>
+                <div className={styles.resultTitle}>
+                  <Trophy size={22} />
+                  <span>TOP 5</span>
+                </div>
+                {round.status === 'revealed' ? (
+                  <ol className={styles.rankList}>
+                    {ranked.map((submission) => (
+                      <li key={submission.playerId}>
+                        <span style={{ '--team': getTeam(submission.team).color } as CSSProperties} />
+                        <strong>{submission.playerName}</strong>
+                        <em>오차 {submission.errorPct}%</em>
+                        <b>{submission.score}점</b>
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <div className={styles.hiddenRank}>
+                    <Radio size={30} />
+                    <span>제출 대기</span>
+                  </div>
+                )}
+              </div>
+
+              <TeamAverages submissions={round.status === 'revealed' ? fullSubmissions : visibleSubmissions} />
+
+              <div className={styles.controlDock}>
+                {round.status === 'active' ? (
+                  <button className={styles.primaryButton} onClick={() => postAction('reveal')} type="button">
+                    <Sparkles size={23} /> 정답 공개
+                  </button>
+                ) : (
+                  <button className={styles.primaryButton} onClick={() => postAction('nextRound')} type="button">
+                    <Play size={23} /> 다음 문제
+                  </button>
+                )}
+              </div>
+            </aside>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function StudentScreen({
+  room,
+  postAction,
+  compact = false
+}: {
+  room: RoomState;
+  postAction: (action: string, payload?: Record<string, unknown>) => Promise<void>;
+  compact?: boolean;
+}) {
+  const [playerId, setPlayerId] = useState('');
+  const [studentName, setStudentName] = useState('');
+  const [selectedTeam, setSelectedTeam] = useState<TeamId>('A');
+  const [guess, setGuess] = useState(0.5);
+  const round = room.round;
+  const player = room.players.find((candidate) => candidate.id === playerId);
+  const submission = round.submissions.find((candidate) => candidate.playerId === playerId);
+  const answer = fractionValue(round.question);
+  const guessPct = positionPct(guess, round.question.min, round.question.max);
+  const answerPct = positionPct(answer, round.question.min, round.question.max);
+  const answerDecimal = formatDecimal(answer);
+  const answerSign = isTerminatingDecimal(round.question.numerator, round.question.denominator) ? '=' : '≈';
+  const submittedDecimal = submission ? formatDecimal(submission.value) : '';
+  const differenceDecimal = submission ? formatDecimal(Math.abs(answer - submission.value)) : '';
+  const directionLabel = submission ? getDirectionLabel(submission.value, answer, differenceDecimal) : '';
+  const divisionWork = createLongDivisionWork(round.question.numerator, round.question.denominator);
+
+  useEffect(() => {
+    const storedId = window.localStorage.getItem('fraction-target-player-id');
+    const storedName = window.localStorage.getItem('fraction-target-player-name');
+    const storedTeam = window.localStorage.getItem('fraction-target-player-team') as TeamId | null;
+
+    if (storedId) setPlayerId(storedId);
+    if (storedName) setStudentName(storedName);
+    if (storedTeam && teams.some((team) => team.id === storedTeam)) setSelectedTeam(storedTeam);
+  }, []);
+
+  useEffect(() => {
+    setGuess(0.5);
+  }, [round.question.id]);
+
+  async function joinRoom() {
+    const id = playerId || `student-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const name = studentName.trim() || '학생';
+    setPlayerId(id);
+    setStudentName(name);
+    window.localStorage.setItem('fraction-target-player-id', id);
+    window.localStorage.setItem('fraction-target-player-name', name);
+    window.localStorage.setItem('fraction-target-player-team', selectedTeam);
+    await postAction('join', { playerId: id, name, team: selectedTeam });
+  }
+
+  async function submitGuess() {
+    await postAction('submit', {
+      playerId,
+      name: studentName,
+      team: selectedTeam,
+      value: guess
+    });
+  }
+
+  return (
+    <section className={compact ? styles.studentWrapCompact : styles.studentWrap}>
+      <div className={styles.phoneFrame}>
+        <div className={styles.phoneSensor} />
+        <header className={styles.phoneHeader}>
+          <div>
+            <p>딱 거기!</p>
+            <strong>분수 과녁</strong>
+          </div>
+          <span style={{ '--team': getTeam(player?.team ?? selectedTeam).color } as CSSProperties}>
+            {player ? getTeam(player.team).name : getTeam(selectedTeam).name}
+          </span>
+        </header>
+
+        {!player ? (
+          <div className={styles.joinCard}>
+            <img alt="" src="/fraction-target/slider-mascot.svg" />
+            <h2>방 코드 {room.code}</h2>
+            <label>
+              이름
+              <input
+                maxLength={10}
+                onChange={(event) => setStudentName(event.target.value)}
+                placeholder="예: 12 민준"
+                value={studentName}
+              />
+            </label>
+            <div className={styles.teamPicker} aria-label="팀 선택">
+              {teams.map((team) => (
+                <button
+                  className={selectedTeam === team.id ? styles.selectedTeam : undefined}
+                  key={team.id}
+                  onClick={() => setSelectedTeam(team.id)}
+                  style={{ '--team': team.color, '--team-soft': team.softColor } as CSSProperties}
+                  type="button"
+                >
+                  {team.name}
+                </button>
+              ))}
+            </div>
+            <button className={styles.phonePrimary} onClick={joinRoom} type="button">
+              <Send size={20} /> 입장
+            </button>
+          </div>
+        ) : round.status === 'active' && !submission ? (
+          <div className={styles.playCard}>
+            <div className={styles.mobileQuestion}>
+              <span>{round.question.boss ? '보스전' : `${round.index + 1}라운드`}</span>
+              <h2>
+                <FractionBadge label={round.question.label} />
+                <em>은 어디일까?</em>
+              </h2>
+            </div>
+            <div className={styles.sliderReadout}>
+              <b>{Math.round(guessPct)}%</b>
+              <span>{guess.toFixed(3)}</span>
+            </div>
+            <label className={styles.sliderShell}>
+              <span>0</span>
+              <input
+                aria-label="분수 위치 슬라이더"
+                max={round.question.max}
+                min={round.question.min}
+                onChange={(event) => setGuess(Number(event.target.value))}
+                step="0.001"
+                style={{ '--guess': `${guessPct}%` } as CSSProperties}
+                type="range"
+                value={guess}
+              />
+              <span>1</span>
+            </label>
+            <div className={styles.landmarks}>
+              <span>0</span>
+              <span>1/2</span>
+              <span>1</span>
+            </div>
+            <button className={styles.phonePrimary} onClick={submitGuess} type="button">
+              <Target size={21} /> 제출
+            </button>
+          </div>
+        ) : round.status === 'revealed' && submission ? (
+          <div className={styles.resultPhoneCard}>
+            <div className={styles.solutionHeader}>
+              <span>정답 공개</span>
+              <strong>{submission.score}점</strong>
+            </div>
+
+            <section className={styles.decimalLesson}>
+              <p>분수를 소수로 바꾸면</p>
+              <h2>
+                {round.question.label} {answerSign} {answerDecimal}
+              </h2>
+              <LongDivisionBoard work={divisionWork} />
+            </section>
+
+            <div className={styles.errorMeters}>
+              <span style={{ left: `${answerPct}%` }} />
+              <b style={{ left: `${positionPct(submission.value, round.question.min, round.question.max)}%` }} />
+            </div>
+
+            <div className={styles.answerComparison}>
+              <div>
+                <span>정답</span>
+                <strong>{answerDecimal}</strong>
+              </div>
+              <div>
+                <span>내 답</span>
+                <strong>{submittedDecimal}</strong>
+              </div>
+            </div>
+
+            <div className={styles.differenceCard}>
+              <span>두 값의 차이</span>
+              <strong>
+                |{answerDecimal} - {submittedDecimal}| = {differenceDecimal}
+              </strong>
+              <p>{directionLabel}</p>
+            </div>
+          </div>
+        ) : (
+          <div className={styles.waitCard}>
+            <img alt="" src="/fraction-target/slider-mascot.svg" />
+            <h2>{submission ? '제출 완료' : '기다리는 중'}</h2>
+            <p>{submission ? '전자칠판에서 정답을 공개할 거예요.' : '선생님이 문제를 시작하면 슬라이더가 열려요.'}</p>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function NumberLine({ room, now, submissions }: { room: RoomState; now: number; submissions: Submission[] }) {
+  const round = room.round;
+  const question = round.question;
+  const answer = fractionValue(question);
+  const answerPct = positionPct(answer, question.min, question.max);
+  const ticks = [0, 0.25, 0.5, 0.75, 1];
+
+  return (
+    <section className={styles.numberLineStage}>
+      <div className={styles.radarPulse} style={{ '--answer': `${answerPct}%` } as CSSProperties} />
+      <div className={styles.numberLine}>
+        {ticks.map((tick) => (
+          <span
+            className={styles.tick}
+            key={tick}
+            style={{ '--x': `${positionPct(tick, question.min, question.max)}%` } as CSSProperties}
+          >
+            <i />
+            <b>{tick === 0.5 ? '1/2' : tick}</b>
+          </span>
+        ))}
+
+        {submissions.map((submission, index) => (
+          <span
+            className={styles.answerDot}
+            key={submission.playerId}
+            style={
+              {
+                '--x': `${positionPct(submission.value, question.min, question.max)}%`,
+                '--y': `${22 + ((index * 37) % 48)}%`,
+                '--team': getTeam(submission.team).color,
+                '--delay': `${Math.max(0, (submission.submittedAt - (round.startedAt ?? now)) / 1000)}s`
+              } as CSSProperties
+            }
+            title={`${submission.playerName}: ${submission.value}`}
+          />
+        ))}
+
+        {round.status === 'revealed' ? (
+          <div className={styles.correctLine} style={{ '--x': `${answerPct}%` } as CSSProperties}>
+            <span>정답</span>
+          </div>
+        ) : null}
+      </div>
+      <div className={styles.lineLabels}>
+        <span>0</span>
+        <span>1</span>
+      </div>
+    </section>
+  );
+}
+
+function QuestionPicker({
+  currentIndex,
+  postAction
+}: {
+  currentIndex: number;
+  postAction: (action: string, payload?: Record<string, unknown>) => Promise<void>;
+}) {
+  return (
+    <div className={styles.questionPicker}>
+      {questionBank.map((question, index) => (
+        <button
+          className={index === currentIndex ? styles.currentQuestion : undefined}
+          key={question.id}
+          onClick={() => postAction('setQuestion', { value: index })}
+          type="button"
+        >
+          {question.boss ? <Crown size={16} /> : null}
+          {question.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function TeamRoster({ players }: { players: RoomState['players'] }) {
+  return (
+    <div className={styles.teamRoster}>
+      {teams.map((team) => {
+        const count = players.filter((player) => player.team === team.id).length;
+        return (
+          <div key={team.id} style={{ '--team': team.color, '--team-soft': team.softColor } as CSSProperties}>
+            <span>{team.name}</span>
+            <strong>{count}</strong>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function TeamAverages({ submissions }: { submissions: Submission[] }) {
+  return (
+    <div className={styles.teamAverages}>
+      <div className={styles.resultTitle}>
+        <Gauge size={22} />
+        <span>팀 평균 오차</span>
+      </div>
+      {teams.map((team) => {
+        const teamSubmissions = submissions.filter((submission) => submission.team === team.id);
+        const average =
+          teamSubmissions.length > 0
+            ? teamSubmissions.reduce((sum, submission) => sum + submission.errorPct, 0) / teamSubmissions.length
+            : null;
+        const width = average === null ? 6 : Math.max(6, 100 - average * 4);
+
+        return (
+          <div className={styles.teamBar} key={team.id}>
+            <span style={{ '--team': team.color } as CSSProperties}>{team.name}</span>
+            <i>
+              <b style={{ '--team': team.color, width: `${width}%` } as CSSProperties} />
+            </i>
+            <em>{average === null ? '-' : `${average.toFixed(1)}%`}</em>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function StatPill({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return (
+    <div className={styles.statPill}>
+      {icon}
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function FractionBadge({ label }: { label: string }) {
+  const [numerator, denominator] = label.split('/');
+
+  return (
+    <span className={styles.fractionBadge} aria-label={label}>
+      <span>{numerator}</span>
+      <i />
+      <span>{denominator}</span>
+    </span>
+  );
+}
+
+type LongDivisionStep = {
+  workingDividend: number;
+  product: number;
+  remainder: number;
+};
+
+type LongDivisionWork = {
+  numerator: number;
+  divisor: number;
+  integerPart: number;
+  quotientDigits: number[];
+  quotient: string;
+  steps: LongDivisionStep[];
+  hasMore: boolean;
+};
+
+function LongDivisionBoard({ work }: { work: LongDivisionWork }) {
+  const columnWidth = 24;
+  const integerX = 84;
+  const decimalPointX = 108;
+  const digitX = (column: number) => (column === 0 ? integerX : 132 + (column - 1) * columnWidth);
+  const stepHeight = 58;
+  const dividendY = 78;
+  const firstStepY = 118;
+  const bracketX = 58;
+  const bracketEndY = dividendY + 12;
+  const finalY = firstStepY + Math.max(1, work.steps.length - 1) * stepHeight + 46;
+  const viewHeight = finalY + 20;
+  const dividendDecimalPlaces = Math.max(1, work.quotientDigits.length);
+  const dividendDigits = String(work.numerator).split('');
+  const dividendIntegerStartColumn = Math.max(0, 1 - dividendDigits.length);
+
+  return (
+    <div className={styles.longDivisionBoard}>
+      <p className={styles.longDivisionTitle}>
+        {work.numerator} ÷ {work.divisor}
+      </p>
+      <svg
+        aria-label={`${work.numerator} 나누기 ${work.divisor} 긴 나눗셈`}
+        className={styles.longDivisionCanvas}
+        role="img"
+        viewBox={`0 0 260 ${viewHeight}`}
+      >
+        <text className={styles.longDivisionQuotientText} textAnchor="middle" x={digitX(0)} y="34">
+          {work.integerPart}
+        </text>
+        <text className={styles.longDivisionQuotientText} textAnchor="middle" x={decimalPointX} y="34">
+          .
+        </text>
+        {work.quotientDigits.map((digit, index) => (
+          <text
+            className={styles.longDivisionQuotientText}
+            key={`q-${digit}-${index}`}
+            textAnchor="middle"
+            x={digitX(index + 1)}
+            y="34"
+          >
+            {digit}
+          </text>
+        ))}
+        {work.hasMore ? (
+          <text className={styles.longDivisionQuotientText} textAnchor="middle" x={digitX(work.quotientDigits.length + 1)} y="34">
+            …
+          </text>
+        ) : null}
+        <line className={styles.longDivisionDivider} x1={bracketX} x2="210" y1="52" y2="52" />
+        <line className={styles.longDivisionDivider} x1={bracketX} x2={bracketX} y1="52" y2={bracketEndY} />
+        <text className={styles.longDivisionNumber} textAnchor="end" x="46" y={dividendY}>
+          {work.divisor}
+        </text>
+        {dividendDigits.map((digit, index) => (
+          <text
+            className={styles.longDivisionDividendText}
+            key={`d-${digit}-${index}`}
+            textAnchor="middle"
+            x={digitX(dividendIntegerStartColumn + index)}
+            y={dividendY}
+          >
+            {digit}
+          </text>
+        ))}
+        <text className={styles.longDivisionDividendText} textAnchor="middle" x={decimalPointX} y={dividendY}>
+          .
+        </text>
+        {Array.from({ length: dividendDecimalPlaces }).map((_, index) => (
+          <text className={styles.longDivisionDividendText} key={`zero-${index}`} textAnchor="middle" x={digitX(index + 1)} y={dividendY}>
+            0
+          </text>
+        ))}
+        {work.steps.map((step, index) => {
+          const y = firstStepY + index * stepHeight;
+          const startColumn = index;
+          const workingDigits = String(step.workingDividend).split('');
+          const productDigits = String(step.product).split('');
+          const lineStartX = digitX(startColumn) - 12;
+          const lineEndX = digitX(startColumn + Math.max(workingDigits.length, productDigits.length) - 1) + 12;
+
+          return (
+            <g key={`${step.workingDividend}-${index}`}>
+              {workingDigits.map((digit, digitIndex) => (
+                <text
+                  className={styles.longDivisionNumber}
+                  key={`w-${digit}-${digitIndex}`}
+                  textAnchor="middle"
+                  x={digitX(startColumn + digitIndex)}
+                  y={y}
+                >
+                  {digit}
+                </text>
+              ))}
+              {productDigits.map((digit, digitIndex) => (
+                <text
+                  className={styles.longDivisionProduct}
+                  key={`p-${digit}-${digitIndex}`}
+                  textAnchor="middle"
+                  x={digitX(startColumn + digitIndex)}
+                  y={y + 26}
+                >
+                  {digit}
+                </text>
+              ))}
+              <line className={styles.longDivisionSubline} x1={lineStartX} x2={lineEndX} y1={y + 35} y2={y + 35} />
+              <text className={styles.longDivisionRemainder} textAnchor="start" x={lineEndX + 14} y={y + 26}>
+                r {step.remainder}
+              </text>
+            </g>
+          );
+        })}
+        {work.hasMore ? (
+          <text className={styles.longDivisionRemainder} textAnchor="start" x={digitX(work.steps.length)} y={finalY}>
+            반복
+          </text>
+        ) : null}
+      </svg>
+      <p className={styles.longDivisionHint}>나머지에 0 붙임</p>
+    </div>
+  );
+}
+
+function createLongDivisionWork(numerator: number, denominator: number): LongDivisionWork {
+  const integerPart = Math.floor(numerator / denominator);
+  let remainder = numerator % denominator;
+  const digits: number[] = [];
+  const steps: LongDivisionStep[] = [];
+  const maxDigits = 3;
+
+  for (let index = 0; index < maxDigits && remainder !== 0; index += 1) {
+    const workingDividend = remainder * 10;
+    const digit = Math.floor(workingDividend / denominator);
+    const product = digit * denominator;
+    remainder = workingDividend - product;
+
+    digits.push(digit);
+    steps.push({ workingDividend, product, remainder });
+  }
+
+  return {
+    numerator,
+    divisor: denominator,
+    integerPart,
+    quotientDigits: digits,
+    quotient: digits.length > 0 ? `${integerPart}.${digits.join('')}${remainder === 0 ? '' : '...'}` : `${integerPart}`,
+    steps,
+    hasMore: remainder !== 0
+  };
+}
+
+function formatDecimal(value: number): string {
+  return value.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
+}
+
+function isTerminatingDecimal(numerator: number, denominator: number): boolean {
+  let reducedDenominator = denominator / greatestCommonDivisor(numerator, denominator);
+
+  while (reducedDenominator % 2 === 0) reducedDenominator /= 2;
+  while (reducedDenominator % 5 === 0) reducedDenominator /= 5;
+
+  return reducedDenominator === 1;
+}
+
+function greatestCommonDivisor(left: number, right: number): number {
+  let a = Math.abs(left);
+  let b = Math.abs(right);
+
+  while (b !== 0) {
+    const rest = a % b;
+    a = b;
+    b = rest;
+  }
+
+  return a || 1;
+}
+
+function getDirectionLabel(value: number, answer: number, difference: string): string {
+  if (Math.abs(value - answer) < 0.0005) {
+    return '정답 위치와 거의 같아요.';
+  }
+
+  return value < answer
+    ? `내 답은 정답보다 왼쪽으로 ${difference}만큼 떨어져 있어요.`
+    : `내 답은 정답보다 오른쪽으로 ${difference}만큼 떨어져 있어요.`;
+}
+
+function getVisibleSubmissions(room: RoomState, now: number): Submission[] {
+  if (room.round.status !== 'active') return room.round.submissions;
+  return room.round.submissions.filter((submission) => submission.submittedAt <= now);
+}
+
+function getSecondsLeft(room: RoomState, now: number): number {
+  if (room.round.status !== 'active' || !room.round.startedAt) return room.round.durationSec;
+  const elapsed = Math.floor((now - room.round.startedAt) / 1000);
+  return Math.max(0, room.round.durationSec - elapsed);
+}
