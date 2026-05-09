@@ -223,6 +223,17 @@ function TeacherBoard({
 
         {round.status === 'lobby' ? (
           <div className={styles.lobbyLayout}>
+            <section className={styles.problemBankPanel}>
+              <div className={styles.problemBankHeader}>
+                <div>
+                  <span>문제 선택</span>
+                  <strong>레벨과 번호를 골라요.</strong>
+                </div>
+                <b>{questionBank.length}문제</b>
+              </div>
+              <QuestionPicker currentIndex={round.index} postAction={postAction} />
+            </section>
+
             <section className={styles.lobbyTopBar}>
               <div className={styles.lobbyQrBlock}>
                 <div className={styles.qrHeader}>
@@ -253,26 +264,18 @@ function TeacherBoard({
               </div>
             </section>
 
-            <section className={styles.problemBankPanel}>
-              <div className={styles.problemBankHeader}>
-                <div>
-                  <span>문제 선택</span>
-                  <strong>레벨과 번호를 골라 바로 시작해요.</strong>
-                </div>
-                <b>{questionBank.length}문제</b>
-              </div>
-              <QuestionPicker currentIndex={round.index} postAction={postAction} />
-            </section>
-
           </div>
         ) : (
           <div className={styles.roundLayout}>
             <section className={styles.questionBanner}>
               <div>
                 <p>
-                  {round.question.levelTitle} · {round.question.objective}
+                  현재 문제 · {round.question.levelTitle} · {round.question.objective}
                 </p>
-                <h2>답변 분포</h2>
+                <h2>
+                  <QuestionExpression label={round.question.label} compact />
+                  <span>위치 찍기</span>
+                </h2>
               </div>
               <div className={styles.answerBadge} data-visible={round.status === 'revealed'}>
                 <Crosshair size={22} />
@@ -596,41 +599,70 @@ function QuestionPicker({
   currentIndex: number;
   postAction: (action: string, payload?: Record<string, unknown>) => Promise<void>;
 }) {
-  const groups = questionBank.reduce<Array<{ level: number; title: string; questions: Array<{ question: FractionQuestion; index: number }> }>>(
-    (acc, question, index) => {
-      const group = acc.find((candidate) => candidate.level === question.level);
-      if (group) {
-        group.questions.push({ question, index });
-      } else {
-        acc.push({ level: question.level, title: question.levelTitle, questions: [{ question, index }] });
-      }
-      return acc;
-    },
-    []
-  );
+  const currentQuestion = questionBank[currentIndex] ?? questionBank[0];
+  const selectedLevel = currentQuestion.level;
+  const selectedNumber = currentQuestion.levelIndex;
+  const levels = Array.from(new Set(questionBank.map((question) => question.level))).sort((left, right) => left - right);
+  const selectedLevelQuestions = questionBank
+    .map((question, index) => ({ question, index }))
+    .filter(({ question }) => question.level === selectedLevel)
+    .sort((left, right) => left.question.levelIndex - right.question.levelIndex);
+
+  const selectQuestion = (level: number, levelIndex: number) => {
+    const nextIndex = questionBank.findIndex((question) => question.level === level && question.levelIndex === levelIndex);
+    if (nextIndex >= 0) {
+      void postAction('setQuestion', { value: nextIndex });
+    }
+  };
 
   return (
     <div className={styles.questionPicker}>
-      {groups.map((group) => (
-        <section className={styles.questionLevel} key={group.level}>
-          <h3>{group.title}</h3>
+      <div className={styles.lobbyIllustration}>
+        <img alt="학생들이 분수 수직선 슬라이더에 위치를 찍는 만화 장면" src="/fraction-target/classroom-slider-hero.png" />
+        <div className={styles.lobbyIllustrationBadge}>
+          <span>현재 선택</span>
+          <strong>
+            Lv{selectedLevel} · {selectedNumber}번
+          </strong>
+          <em>{currentQuestion.levelTitle}</em>
+        </div>
+      </div>
+
+      <div className={styles.selectionDock}>
+        <section className={styles.selectionRow}>
+          <h3>레벨</h3>
           <div>
-            {group.questions.map(({ question, index }) => (
+            {levels.map((level) => (
               <button
-                className={index === currentIndex ? styles.currentQuestion : undefined}
-                key={question.id}
-                onClick={() => postAction('setQuestion', { value: index })}
-                title={`${question.label} = ${formatResultFraction(question)} = ${formatDecimal(fractionValue(question))}`}
+                aria-pressed={level === selectedLevel}
+                key={level}
+                onClick={() => selectQuestion(level, selectedNumber)}
+                title={`Lv${level}`}
                 type="button"
               >
-                <span>{question.boss ? 'B' : question.levelIndex}</span>
-                <strong>{question.label}</strong>
-                <em>{formatRange(question)}</em>
+                Lv{level}
               </button>
             ))}
           </div>
         </section>
-      ))}
+
+        <section className={styles.selectionRow}>
+          <h3>문제 번호</h3>
+          <div>
+            {selectedLevelQuestions.map(({ question }) => (
+              <button
+                aria-pressed={question.levelIndex === selectedNumber}
+                key={question.id}
+                onClick={() => selectQuestion(selectedLevel, question.levelIndex)}
+                title={`${question.label} = ${formatResultFraction(question)} = ${formatDecimal(fractionValue(question))}`}
+                type="button"
+              >
+                {question.levelIndex}
+              </button>
+            ))}
+          </div>
+        </section>
+      </div>
     </div>
   );
 }

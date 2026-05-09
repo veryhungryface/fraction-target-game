@@ -187,8 +187,8 @@
 .lobbyLayout {
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(300px, 0.82fr);
+  grid-template-rows: minmax(0, 1fr);
   gap: clamp(14px, 1.5vw, 22px);
 }
 
@@ -201,27 +201,37 @@
 }
 
 .lobbyTopBar {
-  grid-column: 1 / -1;
+  grid-column: 3;
+  grid-row: 1;
   display: flex;
+  min-height: 0;
+  flex-direction: column;
   align-items: center;
   justify-content: space-between;
-  gap: clamp(16px, 1.5vw, 26px);
-  padding: clamp(14px, 1.25vw, 22px);
+  gap: clamp(18px, 2vw, 34px);
+  padding: clamp(20px, 2vw, 34px);
 }
 
 .lobbyQrBlock {
+  width: 100%;
   display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
   align-items: center;
-  gap: clamp(14px, 1.3vw, 22px);
+  justify-content: center;
+  gap: clamp(16px, 1.5vw, 26px);
 }
 
 .lobbyQrBlock .qrImage,
 .lobbyQrBlock .qrFallback {
-  width: clamp(92px, 7.5vw, 128px);
-  border-radius: 18px;
+  width: min(100%, clamp(220px, 21vw, 360px));
+  border-radius: 28px;
 }
 
 .problemBankPanel {
+  grid-column: 1 / span 2;
+  grid-row: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -274,10 +284,12 @@
 }
 
 .lobbyActions {
-  display: flex;
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: center;
   gap: 12px;
-  margin-left: auto;
+  margin-left: 0;
 }
 
 .primaryButton,
@@ -328,93 +340,162 @@
   box-shadow: 0 12px 26px rgba(19, 32, 31, 0.1);
 }
 
+.lobbyActions .primaryButton {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-height: clamp(88px, 8vw, 124px);
+  border-radius: 26px;
+  font-size: clamp(26px, 2.4vw, 38px);
+}
+
+.lobbyActions .iconButton {
+  width: 100%;
+  height: clamp(58px, 4.6vw, 76px);
+}
+
 .questionPicker {
   min-height: 0;
   flex: 1;
-  overflow: auto;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(12px, 1.1vw, 18px);
   margin-top: clamp(12px, 1.2vw, 18px);
-  padding-right: 4px;
 }
 
-.questionLevel {
+.lobbyIllustration {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+  border-radius: 24px;
+  background: rgba(255, 250, 242, 0.48);
+  box-shadow:
+    inset 0 0 0 1px rgba(19, 32, 31, 0.08),
+    0 18px 40px rgba(19, 32, 31, 0.1);
+}
+
+.lobbyIllustration img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  object-position: center 44%;
+}
+
+.lobbyIllustration::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(19, 32, 31, 0) 46%, rgba(19, 32, 31, 0.36) 100%);
+}
+
+.lobbyIllustrationBadge {
+  position: absolute;
+  left: clamp(18px, 1.6vw, 28px);
+  bottom: clamp(16px, 1.5vw, 26px);
+  z-index: 1;
+  display: grid;
+  gap: 4px;
+  padding: 12px 16px;
+  border-radius: 18px;
+  background: rgba(255, 250, 242, 0.92);
+  color: var(--ink);
+  box-shadow: 0 14px 34px rgba(19, 32, 31, 0.18);
+}
+
+.lobbyIllustrationBadge span {
+  color: var(--coral);
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.lobbyIllustrationBadge strong {
+  font-size: clamp(22px, 2vw, 34px);
+  font-weight: 950;
+  line-height: 1;
+}
+
+.lobbyIllustrationBadge em {
+  color: #40514e;
+  font-size: clamp(12px, 0.9vw, 15px);
+  font-style: normal;
+  font-weight: 900;
+}
+
+.selectionDock {
+  flex: 0 0 auto;
+  display: grid;
+  gap: clamp(8px, 0.75vw, 12px);
+}
+
+.selectionRow {
   min-width: 0;
   display: grid;
-  gap: 7px;
-  padding: 10px;
+  grid-template-columns: minmax(88px, 0.2fr) minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(10px, 0.9vw, 16px);
+  padding: clamp(9px, 0.8vw, 12px);
   border-radius: 18px;
-  background: rgba(255, 250, 242, 0.48);
+  background: rgba(255, 250, 242, 0.72);
   box-shadow: inset 0 0 0 1px rgba(19, 32, 31, 0.08);
 }
 
-.questionLevel h3 {
+.selectionRow h3 {
   margin: 0;
   color: #40514e;
-  font-size: clamp(12px, 0.9vw, 15px);
+  font-size: clamp(15px, 1.1vw, 19px);
   font-weight: 950;
-  line-height: 1.15;
+  line-height: 1;
 }
 
-.questionLevel div {
+.selectionRow div {
+  min-height: 0;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
+  gap: clamp(6px, 0.55vw, 10px);
 }
 
-.questionPicker button {
+.selectionRow:first-child div {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.selectionRow:last-child div {
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+}
+
+.selectionRow button {
   min-width: 0;
-  min-height: clamp(40px, 3vw, 52px);
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-height: clamp(38px, 3.1vw, 52px);
+  width: 100%;
+  display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 6px 8px;
+  justify-content: center;
+  padding: 0 8px;
   border: 1px solid rgba(19, 32, 31, 0.12);
-  border-radius: 12px;
+  border-radius: 999px;
   background: rgba(255, 250, 242, 0.82);
   color: var(--ink);
-  text-align: left;
-  font-size: clamp(12px, 0.84vw, 15px);
+  font-size: clamp(15px, 1.15vw, 21px);
   font-weight: 950;
+  line-height: 1;
 }
 
-.questionPicker button > span {
-  width: 22px;
-  height: 22px;
-  display: grid;
-  place-items: center;
-  border-radius: 999px;
-  background: rgba(19, 32, 31, 0.1);
-  font-size: 12px;
-}
-
-.questionPicker button strong {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.questionPicker button em {
-  color: var(--muted);
-  font-size: 11px;
-  font-style: normal;
-}
-
-.questionPicker .currentQuestion {
+.selectionRow button[aria-pressed="true"] {
   background: var(--yellow);
   border-color: rgba(19, 32, 31, 0.18);
   box-shadow: 0 12px 26px rgba(245, 184, 46, 0.28);
 }
 
 .qrHeader {
+  width: 100%;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 12px;
   color: var(--ink);
-  font-size: clamp(20px, 1.8vw, 30px);
+  font-size: clamp(26px, 2.2vw, 38px);
   font-weight: 950;
 }
 
@@ -1442,10 +1523,6 @@
     aspect-ratio: 16 / 9;
   }
 
-  .questionPicker {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
 }
 
 @media (max-width: 720px) {
@@ -1464,7 +1541,8 @@
   }
 
   .lobbyTopBar {
-    flex-wrap: wrap;
+    grid-column: auto;
+    grid-row: auto;
   }
 
   .lobbyActions {
@@ -1477,7 +1555,16 @@
   }
 
   .questionPicker {
+    overflow: auto;
+  }
+
+  .selectionRow {
     grid-template-columns: 1fr;
+  }
+
+  .selectionRow:first-child div,
+  .selectionRow:last-child div {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 
   .roundLayout {
