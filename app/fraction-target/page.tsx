@@ -3,12 +3,13 @@
 import {
   Crosshair,
   Gauge,
+  Plus,
   Play,
   QrCode,
   Radio,
-  RotateCcw,
   Send,
   Sparkles,
+  Shuffle,
   Target,
   Timer,
   Trophy,
@@ -70,6 +71,18 @@ export default function FractionTargetPage() {
     },
     [roomCode]
   );
+
+  const createNewTeacherRoom = useCallback(() => {
+    const nextRoomCode = createClientRoomCode(roomCode);
+    setRoom(null);
+    setRoomCode(nextRoomCode);
+    setView('teacher');
+
+    const url = new URL(window.location.href);
+    url.searchParams.set('view', 'teacher');
+    url.searchParams.set('room', nextRoomCode);
+    window.history.pushState(null, '', url);
+  }, [roomCode]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -163,22 +176,35 @@ export default function FractionTargetPage() {
       ) : view === 'student' ? (
         <StudentScreen room={room} postAction={postAction} />
       ) : (
-        <TeacherBoard room={room} now={serverNow} studentUrl={studentUrl} postAction={postAction} />
+        <TeacherBoard
+          onCreateNewRoom={createNewTeacherRoom}
+          room={room}
+          now={serverNow}
+          studentUrl={studentUrl}
+          postAction={postAction}
+        />
       )}
     </main>
   );
 }
 
-function createClientRoomCode(): string {
-  return String(1000 + Math.floor(Math.random() * 9000));
+function createClientRoomCode(exceptCode?: string): string {
+  let nextCode = '';
+  do {
+    nextCode = String(1000 + Math.floor(Math.random() * 9000));
+  } while (nextCode === exceptCode);
+
+  return nextCode;
 }
 
 function TeacherBoard({
+  onCreateNewRoom,
   room,
   now,
   studentUrl,
   postAction
 }: {
+  onCreateNewRoom: () => void;
   room: RoomState;
   now: number;
   studentUrl: string;
@@ -255,11 +281,17 @@ function TeacherBoard({
                 <button className={styles.primaryButton} onClick={() => postAction('startRound')} type="button">
                   <Play size={24} /> 게임 시작
                 </button>
-                <button className={styles.iconButton} onClick={() => postAction('seedDemo')} title="샘플 반 채우기" type="button">
-                  <UsersRound size={22} />
+                <button
+                  className={styles.secondaryActionButton}
+                  onClick={() => postAction('setQuestion', { value: getRandomQuestionIndex(round.index) })}
+                  type="button"
+                >
+                  <Shuffle size={22} />
+                  랜덤 문제
                 </button>
-                <button className={styles.iconButton} onClick={() => postAction('reset')} title="방 초기화" type="button">
-                  <RotateCcw size={22} />
+                <button className={styles.secondaryActionButton} onClick={onCreateNewRoom} type="button">
+                  <Plus size={22} />
+                  새 방 만들기
                 </button>
               </div>
             </section>
@@ -973,6 +1005,17 @@ function formatTick(value: number): string {
 
 function getAnswerDifference(submission: Submission, question: FractionQuestion): number {
   return Math.abs(fractionValue(question) - submission.value);
+}
+
+function getRandomQuestionIndex(currentIndex: number): number {
+  if (questionBank.length <= 1) return currentIndex;
+
+  let nextIndex = Math.floor(Math.random() * questionBank.length);
+  if (nextIndex === currentIndex) {
+    nextIndex = (nextIndex + 1) % questionBank.length;
+  }
+
+  return nextIndex;
 }
 
 function formatElapsedTime(submittedAt: number, startedAt: number | undefined): string {

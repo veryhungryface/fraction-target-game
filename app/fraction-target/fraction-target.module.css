@@ -293,7 +293,7 @@
 }
 
 .primaryButton,
-.iconButton,
+.secondaryActionButton,
 .phonePrimary,
 .questionPicker button,
 .teamPicker button {
@@ -321,22 +321,28 @@
 }
 
 .primaryButton:hover,
-.iconButton:hover,
+.secondaryActionButton:hover,
 .phonePrimary:hover,
 .questionPicker button:hover,
 .teamPicker button:hover {
   transform: translateY(-2px);
 }
 
-.iconButton {
-  width: clamp(54px, 4.7vw, 76px);
-  height: clamp(54px, 4.7vw, 76px);
-  display: inline-grid;
-  place-items: center;
+.secondaryActionButton {
+  min-width: 0;
+  min-height: clamp(58px, 4.6vw, 76px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 10px;
   border: 1px solid rgba(19, 32, 31, 0.13);
   border-radius: 18px;
   background: rgba(255, 250, 242, 0.9);
   color: var(--ink);
+  font-size: clamp(14px, 1.05vw, 18px);
+  font-weight: 950;
+  line-height: 1.1;
   box-shadow: 0 12px 26px rgba(19, 32, 31, 0.1);
 }
 
@@ -348,9 +354,8 @@
   font-size: clamp(26px, 2.4vw, 38px);
 }
 
-.lobbyActions .iconButton {
+.lobbyActions .secondaryActionButton {
   width: 100%;
-  height: clamp(58px, 4.6vw, 76px);
 }
 
 .questionPicker {
