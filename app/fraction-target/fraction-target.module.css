@@ -11,7 +11,7 @@
   min-height: 100vh;
   display: grid;
   place-items: center;
-  padding: 84px 18px 24px;
+  padding: 24px 18px;
   color: var(--ink);
   background:
     radial-gradient(circle at 12% 18%, rgba(245, 184, 46, 0.24), transparent 28%),
@@ -27,48 +27,6 @@
 .app button,
 .app input {
   font: inherit;
-}
-
-.modeBar {
-  position: fixed;
-  top: 18px;
-  left: 50%;
-  z-index: 30;
-  display: inline-flex;
-  gap: 6px;
-  padding: 7px;
-  border: 1px solid rgba(19, 32, 31, 0.11);
-  border-radius: 999px;
-  background: rgba(255, 250, 242, 0.86);
-  box-shadow: 0 18px 50px rgba(19, 32, 31, 0.12);
-  transform: translateX(-50%);
-  backdrop-filter: blur(18px);
-}
-
-.modeBar button {
-  min-height: 42px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 16px;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: #40514e;
-  font-size: 14px;
-  font-weight: 800;
-  letter-spacing: 0;
-  cursor: pointer;
-}
-
-.modeBar button:hover {
-  background: rgba(255, 255, 255, 0.72);
-}
-
-.modeBar .activeMode {
-  background: var(--ink);
-  color: var(--paper);
-  box-shadow: 0 10px 24px rgba(19, 32, 31, 0.18);
 }
 
 .loadingPanel {
@@ -96,7 +54,7 @@
 .teacherBoard {
   position: relative;
   width: min(1680px, calc(100vw - 36px));
-  max-height: calc(100vh - 110px);
+  max-height: calc(100vh - 48px);
   aspect-ratio: 16 / 9;
   overflow: hidden;
   display: grid;
@@ -1326,25 +1284,6 @@
   line-height: 1.35;
 }
 
-.studioGrid {
-  width: min(1780px, calc(100vw - 30px));
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 22px;
-}
-
-.studioGrid .teacherBoard {
-  width: 100%;
-  max-height: none;
-}
-
-.studioGrid .phoneFrame {
-  width: min(360px, 24vw);
-  min-height: auto;
-  aspect-ratio: 9 / 18.5;
-}
-
 @keyframes dotLand {
   0% {
     opacity: 0;
@@ -1393,7 +1332,7 @@
 
 @media (max-width: 1180px) {
   .app {
-    padding-top: 78px;
+    padding: 18px;
   }
 
   .teacherBoard {
@@ -1402,28 +1341,9 @@
     aspect-ratio: 16 / 9;
   }
 
-  .studioGrid {
-    grid-template-columns: 1fr;
-  }
-
-  .studioGrid .phoneFrame {
-    width: min(430px, calc(100vw - 32px));
-  }
 }
 
 @media (max-width: 720px) {
-  .modeBar {
-    width: calc(100% - 22px);
-    justify-content: center;
-  }
-
-  .modeBar button {
-    flex: 1;
-    justify-content: center;
-    padding: 0 8px;
-    font-size: 12px;
-  }
-
   .teacherWrap {
     place-items: start;
   }

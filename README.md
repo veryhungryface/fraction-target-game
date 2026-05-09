@@ -12,7 +12,7 @@ npm run dev
 브라우저에서 아래 주소를 엽니다.
 
 ```text
-http://localhost:3012/fraction-target?view=studio
+http://localhost:3012/fraction-target?view=teacher
 ```
 
 학생 화면은 교사용 화면의 QR을 찍거나 아래처럼 접속합니다.

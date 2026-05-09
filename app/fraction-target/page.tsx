@@ -5,13 +5,11 @@ import {
   Crosshair,
   Flag,
   Gauge,
-  Monitor,
   Play,
   QrCode,
   Radio,
   RotateCcw,
   Send,
-  Smartphone,
   Sparkles,
   Target,
   Timer,
@@ -31,17 +29,19 @@ import {
 } from '@/lib/fractionTarget';
 import styles from './fraction-target.module.css';
 
-type ViewMode = 'teacher' | 'student' | 'studio';
+type ViewMode = 'teacher' | 'student';
 type ApiResponse = {
   room: RoomState;
   now: number;
 };
 
 const defaultRoomCode = '4827';
+const teacherStorageKey = 'fraction-target-teacher-id';
 
 export default function FractionTargetPage() {
   const [roomCode, setRoomCode] = useState(defaultRoomCode);
   const [view, setView] = useState<ViewMode>('teacher');
+  const [teacherId, setTeacherId] = useState('');
   const [room, setRoom] = useState<RoomState | null>(null);
   const [serverNow, setServerNow] = useState(Date.now());
   const [origin, setOrigin] = useState('');
@@ -78,11 +78,63 @@ export default function FractionTargetPage() {
     const paramView = params.get('view');
 
     if (paramRoom) setRoomCode(paramRoom);
-    if (paramView === 'student' || paramView === 'studio' || paramView === 'teacher') {
-      setView(paramView);
+    if (paramView === 'student') {
+      setView('student');
+    } else {
+      setView('teacher');
     }
+
+    const storedTeacherId = window.localStorage.getItem(teacherStorageKey);
+    const nextTeacherId = storedTeacherId || `teacher-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+    window.localStorage.setItem(teacherStorageKey, nextTeacherId);
+    setTeacherId(nextTeacherId);
     setOrigin(window.location.origin);
   }, []);
+
+  useEffect(() => {
+    if (view !== 'teacher' || !teacherId || !roomCode) return undefined;
+
+    let mounted = true;
+
+    async function claimRoom() {
+      const response = await fetch('/api/fraction-target', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'claimRoom', roomCode, teacherId })
+      });
+
+      if (!response.ok || !mounted) return;
+
+      const payload = (await response.json()) as ApiResponse;
+      setRoom(payload.room);
+      setServerNow(payload.now);
+
+      if (payload.room.code !== roomCode) {
+        setRoomCode(payload.room.code);
+        const url = new URL(window.location.href);
+        url.searchParams.set('view', 'teacher');
+        url.searchParams.set('room', payload.room.code);
+        window.history.replaceState(null, '', url);
+      } else {
+        const url = new URL(window.location.href);
+        if (url.searchParams.get('view') !== 'teacher' || url.searchParams.get('room') !== roomCode) {
+          url.searchParams.set('view', 'teacher');
+          url.searchParams.set('room', roomCode);
+          window.history.replaceState(null, '', url);
+        }
+      }
+    }
+
+    claimRoom().catch(() => undefined);
+    const timer = window.setInterval(() => {
+      claimRoom().catch(() => undefined);
+    }, 15000);
+
+    return () => {
+      mounted = false;
+      window.clearInterval(timer);
+    };
+  }, [roomCode, teacherId, view]);
 
   useEffect(() => {
     let mounted = true;
@@ -105,40 +157,8 @@ export default function FractionTargetPage() {
     return `${origin}/fraction-target?view=student&room=${roomCode}`;
   }, [origin, roomCode]);
 
-  function changeView(nextView: ViewMode) {
-    setView(nextView);
-    const url = new URL(window.location.href);
-    url.searchParams.set('view', nextView);
-    url.searchParams.set('room', roomCode);
-    window.history.replaceState(null, '', url);
-  }
-
   return (
     <main className={styles.app} data-view={view}>
-      <div className={styles.modeBar} aria-label="화면 선택">
-        <button
-          className={view === 'teacher' ? styles.activeMode : undefined}
-          onClick={() => changeView('teacher')}
-          type="button"
-        >
-          <Monitor size={18} /> 교사용
-        </button>
-        <button
-          className={view === 'student' ? styles.activeMode : undefined}
-          onClick={() => changeView('student')}
-          type="button"
-        >
-          <Smartphone size={18} /> 학생용
-        </button>
-        <button
-          className={view === 'studio' ? styles.activeMode : undefined}
-          onClick={() => changeView('studio')}
-          type="button"
-        >
-          <Sparkles size={18} /> 전체 시안
-        </button>
-      </div>
-
       {!room ? (
         <section className={styles.loadingPanel}>
           <Target size={42} />
@@ -146,11 +166,6 @@ export default function FractionTargetPage() {
         </section>
       ) : view === 'student' ? (
         <StudentScreen room={room} postAction={postAction} />
-      ) : view === 'studio' ? (
-        <section className={styles.studioGrid}>
-          <TeacherBoard room={room} now={serverNow} studentUrl={studentUrl} postAction={postAction} />
-          <StudentScreen room={room} postAction={postAction} compact />
-        </section>
       ) : (
         <TeacherBoard room={room} now={serverNow} studentUrl={studentUrl} postAction={postAction} />
       )}
@@ -766,9 +781,6 @@ function LongDivisionBoard({ work }: { work: LongDivisionWork }) {
                 </text>
               ))}
               <line className={styles.longDivisionSubline} x1={lineStartX} x2={lineEndX} y1={y + 35} y2={y + 35} />
-              <text className={styles.longDivisionRemainder} textAnchor="start" x={lineEndX + 14} y={y + 26}>
-                r {step.remainder}
-              </text>
             </g>
           );
         })}

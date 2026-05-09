@@ -13,6 +13,8 @@ import {
 } from '@/lib/fractionTarget';
 
 type StoredRooms = Map<string, RoomState>;
+const defaultRoomCode = '4827';
+const teacherRoomTtlMs = 5 * 60 * 1000;
 
 declare global {
   // eslint-disable-next-line no-var
@@ -25,6 +27,7 @@ globalThis.__fractionTargetRooms = rooms;
 type RequestBody = {
   action?: string;
   roomCode?: string;
+  teacherId?: string;
   playerId?: string;
   name?: string;
   team?: TeamId;
@@ -39,8 +42,14 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => ({}))) as RequestBody;
-  const room = getRoom(body.roomCode);
   const now = Date.now();
+
+  if (body.action === 'claimRoom') {
+    const room = claimRoom(body.roomCode, normalizeTeacherId(body.teacherId, now), now);
+    return NextResponse.json({ room, now });
+  }
+
+  const room = getRoom(body.roomCode);
 
   switch (body.action) {
     case 'join': {
@@ -133,7 +142,10 @@ export async function POST(request: NextRequest) {
     }
 
     case 'reset': {
-      rooms.set(room.code, createInitialRoom(room.code));
+      const resetRoom = createInitialRoom(room.code);
+      resetRoom.teacherId = room.teacherId;
+      resetRoom.teacherLastSeenAt = now;
+      rooms.set(room.code, resetRoom);
       return NextResponse.json({ room: rooms.get(room.code), now });
     }
 
@@ -160,8 +172,8 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ room, now });
 }
 
-function getRoom(code = '4827'): RoomState {
-  const normalized = code.trim() || '4827';
+function getRoom(code = defaultRoomCode): RoomState {
+  const normalized = normalizeRoomCode(code);
   const existing = rooms.get(normalized);
 
   if (existing) return existing;
@@ -169,6 +181,44 @@ function getRoom(code = '4827'): RoomState {
   const room = createInitialRoom(normalized);
   rooms.set(normalized, room);
   return room;
+}
+
+function claimRoom(preferredCode = defaultRoomCode, teacherId: string, now: number): RoomState {
+  const preferredRoom = getRoom(preferredCode);
+  const room = isRoomClaimedByOther(preferredRoom, teacherId, now) ? getRoom(createAvailableRoomCode(now)) : preferredRoom;
+
+  room.teacherId = teacherId;
+  room.teacherLastSeenAt = now;
+  room.updatedAt = now;
+  return room;
+}
+
+function createAvailableRoomCode(now: number): string {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    const code = String(1000 + Math.floor(Math.random() * 9000));
+    const room = rooms.get(code);
+    if (!room || !isRoomClaimed(room, now)) return code;
+  }
+
+  return String(1000 + (now % 9000));
+}
+
+function isRoomClaimed(room: RoomState, now: number): boolean {
+  return Boolean(room.teacherId && now - (room.teacherLastSeenAt ?? room.updatedAt) < teacherRoomTtlMs);
+}
+
+function isRoomClaimedByOther(room: RoomState, teacherId: string, now: number): boolean {
+  return Boolean(room.teacherId && room.teacherId !== teacherId && isRoomClaimed(room, now));
+}
+
+function normalizeRoomCode(code: string | undefined): string {
+  const normalized = code?.trim();
+  return normalized || defaultRoomCode;
+}
+
+function normalizeTeacherId(value: string | undefined, now: number): string {
+  const normalized = value?.trim().slice(0, 80);
+  return normalized || `teacher-${now}-${Math.floor(Math.random() * 10000)}`;
 }
 
 function normalizeName(value: string | undefined, fallback: string): string {

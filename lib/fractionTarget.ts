@@ -55,6 +55,8 @@ export type RoomState = {
   title: string;
   createdAt: number;
   updatedAt: number;
+  teacherId?: string;
+  teacherLastSeenAt?: number;
   questionBank: FractionQuestion[];
   players: Player[];
   round: RoundState;
