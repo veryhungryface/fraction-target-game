@@ -76,13 +76,10 @@ export default function FractionTargetPage() {
     const params = new URLSearchParams(window.location.search);
     const paramRoom = params.get('room');
     const paramView = params.get('view');
+    const nextView: ViewMode = paramView === 'student' ? 'student' : 'teacher';
 
-    if (paramRoom) setRoomCode(paramRoom);
-    if (paramView === 'student') {
-      setView('student');
-    } else {
-      setView('teacher');
-    }
+    setRoomCode(paramRoom?.trim() || (nextView === 'teacher' ? createClientRoomCode() : defaultRoomCode));
+    setView(nextView);
 
     const storedTeacherId = window.localStorage.getItem(teacherStorageKey);
     const nextTeacherId = storedTeacherId || `teacher-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
@@ -171,6 +168,10 @@ export default function FractionTargetPage() {
       )}
     </main>
   );
+}
+
+function createClientRoomCode(): string {
+  return String(1000 + Math.floor(Math.random() * 9000));
 }
 
 function TeacherBoard({
