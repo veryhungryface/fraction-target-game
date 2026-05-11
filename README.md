@@ -9,6 +9,15 @@ npm install
 npm run dev
 ```
 
+로컬에서 Supabase DB 기반으로 테스트하려면 `.env.local`에 아래 값을 넣습니다.
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=YOUR_SUPABASE_SERVICE_ROLE_KEY
+```
+
+Supabase 환경 변수가 없으면 로컬 개발에서는 임시 메모리 저장소로 동작합니다. Vercel 배포 환경에서는 위 환경 변수가 반드시 필요합니다.
+
 브라우저에서 아래 주소를 엽니다.
 
 ```text
@@ -30,3 +39,14 @@ http://localhost:3012/fraction-target?view=student&room=4827
 - 분수를 소수로 바꾸는 나눗셈 알고리즘 시각화
 - Lv1~Lv7, 총 70문제
 - 문제별 정답 범위 자동 조절
+- Supabase DB 기반 방/학생/제출 상태 저장
+
+## Supabase 테이블
+
+분수 콘텐츠 통신은 아래 세 테이블을 사용합니다.
+
+- `fraction_target_rooms`: 방 PIN, 교사 점유, 현재 라운드 상태
+- `fraction_target_players`: 학생 이름, 팀, 누적 점수
+- `fraction_target_submissions`: 현재 라운드별 학생 제출값과 점수
+
+마이그레이션 SQL은 `supabase/migrations/20260511022000_fraction_target_rooms.sql`에 있습니다.
